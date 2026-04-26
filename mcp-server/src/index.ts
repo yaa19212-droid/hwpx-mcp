@@ -773,7 +773,7 @@ NOTE: This inserts AFTER the table, not inside it. To insert an image INSIDE a t
   },
   {
     name: 'get_table',
-    description: 'Get a specific table with full data',
+    description: 'Get a specific table with full data, including each cell text plus content_tree for nested paragraphs/tables',
     inputSchema: {
       type: 'object',
       properties: {
@@ -786,7 +786,7 @@ NOTE: This inserts AFTER the table, not inside it. To insert an image INSIDE a t
   },
   {
     name: 'get_table_cell',
-    description: 'Get content of a specific table cell',
+    description: 'Get content of a specific table cell, including plain text, content_tree, and nested table metadata',
     inputSchema: {
       type: 'object',
       properties: {

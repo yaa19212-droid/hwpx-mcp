@@ -22,6 +22,7 @@ mcp-server/node_modules/
 *.hwpx.bak
 *.hwp
 test_*.hwpx
+local-test-files/
 
 # Local debug output
 mcp-server/debug-*.txt

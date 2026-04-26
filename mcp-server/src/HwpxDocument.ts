@@ -97,6 +97,17 @@ export interface PositionIndexEntry {
   };
 }
 
+export type CellContentTreeNode =
+  | { type: 'paragraph'; text: string; paragraph_id?: string }
+  | { type: 'table'; rows: number; cols: number; data: TableCellContentSummary[][] };
+
+export interface TableCellContentSummary {
+  text: string;
+  content_tree: CellContentTreeNode[];
+  has_nested_tables: boolean;
+  nested_table_count: number;
+}
+
 export class HwpxDocument {
   private _id: string;
   private _path: string;
@@ -2644,21 +2655,94 @@ export class HwpxDocument {
       rows: table.rows.length,
       cols: table.rows[0]?.cells.length || 0,
       data: table.rows.map(row => row.cells.map(cell => ({
-        text: cell.paragraphs.map(p => p.runs.map(r => r.text).join('')).join('\n'),
+        ...this.summarizeTableCellContent(cell),
         style: cell,
       }))),
     };
   }
 
-  getTableCell(sectionIndex: number, tableIndex: number, row: number, col: number): { text: string; cell: TableCell } | null {
+  getTableCell(sectionIndex: number, tableIndex: number, row: number, col: number): (TableCellContentSummary & { cell: TableCell }) | null {
     const table = this.findTable(sectionIndex, tableIndex);
     if (!table) return null;
     const cell = table.rows[row]?.cells[col];
     if (!cell) return null;
     return {
-      text: cell.paragraphs.map(p => p.runs.map(r => r.text).join('')).join('\n'),
+      ...this.summarizeTableCellContent(cell),
       cell,
     };
+  }
+
+  private summarizeTableCellContent(cell: TableCell): TableCellContentSummary {
+    const contentTree = this.buildCellContentTree(cell);
+    const nestedTableCount = this.countNestedTablesInContentTree(contentTree);
+    return {
+      text: this.getCellPlainText(cell),
+      content_tree: contentTree,
+      has_nested_tables: nestedTableCount > 0,
+      nested_table_count: nestedTableCount,
+    };
+  }
+
+  private buildCellContentTree(cell: TableCell): CellContentTreeNode[] {
+    if (cell.elements && cell.elements.length > 0) {
+      return cell.elements.map(element => {
+        if (element.type === 'paragraph') {
+          const paragraph = element.data as HwpxParagraph;
+          return {
+            type: 'paragraph' as const,
+            text: this.getParagraphPlainText(paragraph),
+            paragraph_id: paragraph.id,
+          };
+        }
+
+        const table = element.data as HwpxTable;
+        return this.buildTableContentTreeNode(table);
+      });
+    }
+
+    const nodes: CellContentTreeNode[] = cell.paragraphs.map(paragraph => ({
+      type: 'paragraph' as const,
+      text: this.getParagraphPlainText(paragraph),
+      paragraph_id: paragraph.id,
+    }));
+
+    for (const nestedTable of cell.nestedTables || []) {
+      nodes.push(this.buildTableContentTreeNode(nestedTable));
+    }
+
+    return nodes;
+  }
+
+  private buildTableContentTreeNode(table: HwpxTable): CellContentTreeNode {
+    return {
+      type: 'table',
+      rows: table.rows.length,
+      cols: table.rows[0]?.cells.length || 0,
+      data: table.rows.map(row => row.cells.map(cell => this.summarizeTableCellContent(cell))),
+    };
+  }
+
+  private countNestedTablesInContentTree(contentTree: CellContentTreeNode[]): number {
+    let count = 0;
+    for (const node of contentTree) {
+      if (node.type === 'table') {
+        count += 1;
+        for (const row of node.data) {
+          for (const cell of row) {
+            count += this.countNestedTablesInContentTree(cell.content_tree);
+          }
+        }
+      }
+    }
+    return count;
+  }
+
+  private getCellPlainText(cell: TableCell): string {
+    return cell.paragraphs.map(p => this.getParagraphPlainText(p)).join('\n');
+  }
+
+  private getParagraphPlainText(paragraph: HwpxParagraph): string {
+    return paragraph.runs.map(run => run.text).join('');
   }
 
   updateTableCell(sectionIndex: number, tableIndex: number, row: number, col: number, text: string, charShapeId?: number): boolean {

@@ -213,6 +213,8 @@ claude mcp add hwpx-mcp node /path/to/hwpx-mcp/mcp-server/dist/index.js
 
 현재 `mcp-server/src/index.ts` 기준으로 MCP 도구는 125개입니다. 아래 표는 자주 쓰는 대표 도구를 워크플로우별로 정리한 것이며, 전체 목록은 MCP 클라이언트의 도구 목록 또는 `get_tool_guide({ workflow: "all" })`에서 확인할 수 있습니다.
 
+전체 도구의 간단한 한국어 요약은 [`docs/mcp-tools-summary-ko.md`](docs/mcp-tools-summary-ko.md)에 정리되어 있습니다.
+
 ### 📁 문서 관리 (Document Management) - 5개
 
 | Tool | 설명 | 주요 파라미터 |
