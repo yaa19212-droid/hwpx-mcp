@@ -1364,21 +1364,26 @@ export class HwpxParser {
       }
     }
 
+    const isInsideOriginalTable = (index: number) => this.isInsideRanges(index, originalTableRanges);
+
     const lineRegex = /<hp:line\b[^>]*(?:\/>|>[\s\S]*?<\/hp:line>)/g;
     let lineMatch;
     while ((lineMatch = lineRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(lineMatch.index)) continue;
       elements.push({ index: lineMatch.index, type: 'line', xml: lineMatch[0] });
     }
 
     const rectRegex = /<hp:rect\b[^>]*(?:\/>|>[\s\S]*?<\/hp:rect>)/g;
     let rectMatch;
     while ((rectMatch = rectRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(rectMatch.index)) continue;
       elements.push({ index: rectMatch.index, type: 'rect', xml: rectMatch[0] });
     }
 
     const ellipseRegex = /<hp:ellipse\b[^>]*(?:\/>|>[\s\S]*?<\/hp:ellipse>)/g;
     let ellipseMatch;
     while ((ellipseMatch = ellipseRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(ellipseMatch.index)) continue;
       elements.push({ index: ellipseMatch.index, type: 'ellipse', xml: ellipseMatch[0] });
     }
 
@@ -1386,6 +1391,7 @@ export class HwpxParser {
     const arcRegex = /<hp:arc\b[^>]*(?:\/>|>[\s\S]*?<\/hp:arc>)/g;
     let arcMatch;
     while ((arcMatch = arcRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(arcMatch.index)) continue;
       elements.push({ index: arcMatch.index, type: 'arc', xml: arcMatch[0] });
     }
 
@@ -1393,6 +1399,7 @@ export class HwpxParser {
     const polygonRegex = /<hp:polygon\b[^>]*(?:\/>|>[\s\S]*?<\/hp:polygon>)/g;
     let polygonMatch;
     while ((polygonMatch = polygonRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(polygonMatch.index)) continue;
       elements.push({ index: polygonMatch.index, type: 'polygon', xml: polygonMatch[0] });
     }
 
@@ -1400,6 +1407,7 @@ export class HwpxParser {
     const curveRegex = /<hp:curve\b[^>]*(?:\/>|>[\s\S]*?<\/hp:curve>)/g;
     let curveMatch;
     while ((curveMatch = curveRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(curveMatch.index)) continue;
       elements.push({ index: curveMatch.index, type: 'curve', xml: curveMatch[0] });
     }
 
@@ -1407,6 +1415,7 @@ export class HwpxParser {
     const connectLineRegex = /<hp:connectLine\b[^>]*(?:\/>|>[\s\S]*?<\/hp:connectLine>)/g;
     let connectLineMatch;
     while ((connectLineMatch = connectLineRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(connectLineMatch.index)) continue;
       elements.push({ index: connectLineMatch.index, type: 'connectline', xml: connectLineMatch[0] });
     }
 
@@ -1414,6 +1423,7 @@ export class HwpxParser {
     const containerRegex = /<hp:container\b[^>]*>[\s\S]*?<\/hp:container>/g;
     let containerMatch;
     while ((containerMatch = containerRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(containerMatch.index)) continue;
       elements.push({ index: containerMatch.index, type: 'container', xml: containerMatch[0] });
     }
 
@@ -1421,6 +1431,7 @@ export class HwpxParser {
     const oleRegex = /<hp:ole\b[^>]*(?:\/>|>[\s\S]*?<\/hp:ole>)/g;
     let oleMatch;
     while ((oleMatch = oleRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(oleMatch.index)) continue;
       elements.push({ index: oleMatch.index, type: 'ole', xml: oleMatch[0] });
     }
 
@@ -1428,6 +1439,7 @@ export class HwpxParser {
     const equationRegex = /<hp:equation\b[^>]*(?:\/>|>[\s\S]*?<\/hp:equation>)/g;
     let equationMatch;
     while ((equationMatch = equationRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(equationMatch.index)) continue;
       elements.push({ index: equationMatch.index, type: 'equation', xml: equationMatch[0] });
     }
 
@@ -1435,6 +1447,7 @@ export class HwpxParser {
     const textArtRegex = /<hp:textArt\b[^>]*(?:\/>|>[\s\S]*?<\/hp:textArt>)/g;
     let textArtMatch;
     while ((textArtMatch = textArtRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(textArtMatch.index)) continue;
       elements.push({ index: textArtMatch.index, type: 'textart', xml: textArtMatch[0] });
     }
 
@@ -1442,6 +1455,7 @@ export class HwpxParser {
     const unknownObjRegex = /<hp:unknownObj\b[^>]*(?:\/>|>[\s\S]*?<\/hp:unknownObj>)/g;
     let unknownObjMatch;
     while ((unknownObjMatch = unknownObjRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(unknownObjMatch.index)) continue;
       elements.push({ index: unknownObjMatch.index, type: 'unknownobject', xml: unknownObjMatch[0] });
     }
 
@@ -1449,48 +1463,56 @@ export class HwpxParser {
     const buttonRegex = /<hp:button\b[^>]*(?:\/>|>[\s\S]*?<\/hp:button>)/g;
     let buttonMatch;
     while ((buttonMatch = buttonRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(buttonMatch.index)) continue;
       elements.push({ index: buttonMatch.index, type: 'button', xml: buttonMatch[0] });
     }
 
     const radioButtonRegex = /<hp:radioButton\b[^>]*(?:\/>|>[\s\S]*?<\/hp:radioButton>)/g;
     let radioButtonMatch;
     while ((radioButtonMatch = radioButtonRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(radioButtonMatch.index)) continue;
       elements.push({ index: radioButtonMatch.index, type: 'radiobutton', xml: radioButtonMatch[0] });
     }
 
     const checkButtonRegex = /<hp:checkButton\b[^>]*(?:\/>|>[\s\S]*?<\/hp:checkButton>)/g;
     let checkButtonMatch;
     while ((checkButtonMatch = checkButtonRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(checkButtonMatch.index)) continue;
       elements.push({ index: checkButtonMatch.index, type: 'checkbutton', xml: checkButtonMatch[0] });
     }
 
     const comboBoxRegex = /<hp:comboBox\b[^>]*(?:\/>|>[\s\S]*?<\/hp:comboBox>)/g;
     let comboBoxMatch;
     while ((comboBoxMatch = comboBoxRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(comboBoxMatch.index)) continue;
       elements.push({ index: comboBoxMatch.index, type: 'combobox', xml: comboBoxMatch[0] });
     }
 
     const editRegex = /<hp:edit\b[^>]*(?:\/>|>[\s\S]*?<\/hp:edit>)/g;
     let editMatch;
     while ((editMatch = editRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(editMatch.index)) continue;
       elements.push({ index: editMatch.index, type: 'edit', xml: editMatch[0] });
     }
 
     const listBoxRegex = /<hp:listBox\b[^>]*(?:\/>|>[\s\S]*?<\/hp:listBox>)/g;
     let listBoxMatch;
     while ((listBoxMatch = listBoxRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(listBoxMatch.index)) continue;
       elements.push({ index: listBoxMatch.index, type: 'listbox', xml: listBoxMatch[0] });
     }
 
     const scrollBarRegex = /<hp:scrollBar\b[^>]*(?:\/>|>[\s\S]*?<\/hp:scrollBar>)/g;
     let scrollBarMatch;
     while ((scrollBarMatch = scrollBarRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(scrollBarMatch.index)) continue;
       elements.push({ index: scrollBarMatch.index, type: 'scrollbar', xml: scrollBarMatch[0] });
     }
 
     const picRegex = /<hp:pic\b[^>]*>[\s\S]*?<\/hp:pic>/g;
     let picMatch;
     while ((picMatch = picRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(picMatch.index)) continue;
       elements.push({ index: picMatch.index, type: 'pic', xml: picMatch[0] });
     }
 
@@ -1498,6 +1520,7 @@ export class HwpxParser {
     const videoRegex = /<hp:video\b[^>]*(?:\/>|>[\s\S]*?<\/hp:video>)/g;
     let videoMatch;
     while ((videoMatch = videoRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(videoMatch.index)) continue;
       elements.push({ index: videoMatch.index, type: 'video', xml: videoMatch[0] });
     }
 
@@ -1505,6 +1528,7 @@ export class HwpxParser {
     const chartRegex = /<hp:chart\b[^>]*(?:\/>|>[\s\S]*?<\/hp:chart>)/g;
     let chartMatch;
     while ((chartMatch = chartRegex.exec(xml)) !== null) {
+      if (isInsideOriginalTable(chartMatch.index)) continue;
       elements.push({ index: chartMatch.index, type: 'chart', xml: chartMatch[0] });
     }
 
@@ -2854,6 +2878,48 @@ export class HwpxParser {
     return results;
   }
 
+  private static extractBalancedTagRanges(xml: string, tagName: string): { xml: string; start: number; end: number }[] {
+    const results: { xml: string; start: number; end: number }[] = [];
+    const openTag = `<${tagName}`;
+    const closeTag = `</${tagName}>`;
+    let pos = 0;
+
+    while (pos < xml.length) {
+      const startIdx = xml.indexOf(openTag, pos);
+      if (startIdx === -1) break;
+
+      let depth = 1;
+      let searchPos = startIdx + openTag.length;
+
+      while (depth > 0 && searchPos < xml.length) {
+        const nextOpen = xml.indexOf(openTag, searchPos);
+        const nextClose = xml.indexOf(closeTag, searchPos);
+
+        if (nextClose === -1) break;
+
+        if (nextOpen !== -1 && nextOpen < nextClose) {
+          depth++;
+          searchPos = nextOpen + openTag.length;
+        } else {
+          depth--;
+          if (depth === 0) {
+            const end = nextClose + closeTag.length;
+            results.push({ xml: xml.substring(startIdx, end), start: startIdx, end });
+          }
+          searchPos = nextClose + closeTag.length;
+        }
+      }
+
+      pos = searchPos;
+    }
+
+    return results;
+  }
+
+  private static isInsideRanges(index: number, ranges: { start: number; end: number }[]): boolean {
+    return ranges.some(range => index > range.start && index < range.end);
+  }
+
   // Extract ALL paragraphs including nested ones (not just top-level)
   private static extractAllParagraphs(xml: string): { xml: string; start: number; end: number }[] {
     const results: { xml: string; start: number; end: number }[] = [];
@@ -3114,45 +3180,88 @@ export class HwpxParser {
     // Remove MEMO fieldBegin content from cell content to prevent memo text appearing in cell
     const cleanedXml = contentXml.replace(/<hp:fieldBegin[^>]*type="MEMO"[^>]*>[\s\S]*?<\/hp:fieldBegin>/gi, '');
 
-    const nestedTables = this.extractBalancedTags(cleanedXml, 'hp:tbl');
+    const tableRanges = this.extractBalancedTagRanges(cleanedXml, 'hp:tbl');
+    const containerRanges = this.extractBalancedTagRanges(cleanedXml, 'hp:container');
+    const ownerRanges = [...tableRanges, ...containerRanges];
+    const elements: Array<{ start: number; end: number; type: 'paragraph' | 'table' | 'image' | 'shape' | 'container'; kind?: string; xml: string }> = [];
 
-    if (nestedTables.length > 0) {
-      cell.nestedTables = [];
+    for (const table of tableRanges) {
+      if (this.isInsideRanges(table.start, tableRanges.filter(range => range !== table))) continue;
+      elements.push({ start: table.start, end: table.end, type: 'table', xml: table.xml });
+    }
+
+    for (const container of containerRanges) {
+      if (this.isInsideRanges(container.start, tableRanges)) continue;
+      if (this.isInsideRanges(container.start, containerRanges.filter(range => range !== container))) continue;
+      elements.push({ start: container.start, end: container.end, type: 'container', xml: container.xml });
+    }
+
+    const paragraphs = this.extractAllParagraphs(cleanedXml);
+    for (const paragraphRange of paragraphs) {
+      if (this.isInsideRanges(paragraphRange.start, ownerRanges)) continue;
+
+      let paragraphXml = paragraphRange.xml;
+      const containedOwners = ownerRanges
+        .filter(range => range.start > paragraphRange.start && range.end < paragraphRange.end)
+        .sort((a, b) => b.start - a.start);
+
+      for (const owner of containedOwners) {
+        const startInParagraph = owner.start - paragraphRange.start;
+        const endInParagraph = owner.end - paragraphRange.start;
+        paragraphXml = paragraphXml.slice(0, startInParagraph) + paragraphXml.slice(endInParagraph);
+      }
+
+      const hasTextContent = /<hp:t\b[^>]*>[^<]+<\/hp:t>/.test(paragraphXml);
+      if (hasTextContent) {
+        elements.push({ start: paragraphRange.start, end: paragraphRange.end, type: 'paragraph', xml: paragraphXml });
+      }
+    }
+
+    const picRegex = /<hp:pic\b[^>]*>[\s\S]*?<\/hp:pic>/g;
+    let picMatch;
+    while ((picMatch = picRegex.exec(cleanedXml)) !== null) {
+      if (this.isInsideRanges(picMatch.index, ownerRanges)) continue;
+      elements.push({ start: picMatch.index, end: picMatch.index + picMatch[0].length, type: 'image', xml: picMatch[0] });
+    }
+
+    const shapeTags = ['line', 'rect', 'ellipse', 'arc', 'polygon', 'curve', 'connectLine', 'chart'];
+    for (const tag of shapeTags) {
+      const shapeRegex = new RegExp(`<hp:${tag}\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/hp:${tag}>)`, 'g');
+      let shapeMatch;
+      while ((shapeMatch = shapeRegex.exec(cleanedXml)) !== null) {
+        if (this.isInsideRanges(shapeMatch.index, ownerRanges)) continue;
+        elements.push({
+          start: shapeMatch.index,
+          end: shapeMatch.index + shapeMatch[0].length,
+          type: 'shape',
+          kind: tag.toLowerCase(),
+          xml: shapeMatch[0],
+        });
+      }
+    }
+
+    elements.sort((a, b) => a.start - b.start || b.end - a.end);
+
+    if (elements.length > 0) {
       cell.elements = [];
+    }
 
-      let remainingXml = cleanedXml;
-      for (const tableXml of nestedTables) {
-        const tableIndex = remainingXml.indexOf(tableXml);
-        if (tableIndex > 0) {
-          const beforeTable = remainingXml.substring(0, tableIndex);
-          const paragraphs = this.extractBalancedTags(beforeTable, 'hp:p');
-          for (const pXml of paragraphs) {
-            const paragraph = this.parseParagraph(pXml);
-            cell.paragraphs.push(paragraph);
-            cell.elements.push({ type: 'paragraph', data: paragraph });
-          }
-        }
-
-        const nestedTable = this.parseTable(tableXml);
-        cell.nestedTables.push(nestedTable);
-        cell.elements.push({ type: 'table', data: nestedTable });
-
-        remainingXml = remainingXml.substring(tableIndex + tableXml.length);
-      }
-
-      if (remainingXml) {
-        const paragraphs = this.extractBalancedTags(remainingXml, 'hp:p');
-        for (const pXml of paragraphs) {
-          const paragraph = this.parseParagraph(pXml);
-          cell.paragraphs.push(paragraph);
-          cell.elements.push({ type: 'paragraph', data: paragraph });
-        }
-      }
-    } else {
-      const paragraphs = this.extractBalancedTags(cleanedXml, 'hp:p');
-      for (const pXml of paragraphs) {
-        const paragraph = this.parseParagraph(pXml);
+    for (const element of elements) {
+      if (element.type === 'paragraph') {
+        const paragraph = this.parseParagraph(element.xml);
         cell.paragraphs.push(paragraph);
+        cell.elements!.push({ type: 'paragraph', data: paragraph });
+      } else if (element.type === 'table') {
+        const nestedTable = this.parseTable(element.xml);
+        if (!cell.nestedTables) cell.nestedTables = [];
+        cell.nestedTables.push(nestedTable);
+        cell.elements!.push({ type: 'table', data: nestedTable });
+      } else if (element.type === 'image') {
+        cell.elements!.push({ type: 'image', data: { xml: element.xml } });
+      } else if (element.type === 'container') {
+        cell.elements!.push({ type: 'container', data: { xml: element.xml } });
+      } else {
+        cell.elements!.push({ type: 'shape', data: { kind: element.kind || 'shape', xml: element.xml } });
       }
     }
   }

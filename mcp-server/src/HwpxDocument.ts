@@ -99,7 +99,10 @@ export interface PositionIndexEntry {
 
 export type CellContentTreeNode =
   | { type: 'paragraph'; text: string; paragraph_id?: string }
-  | { type: 'table'; rows: number; cols: number; data: TableCellContentSummary[][] };
+  | { type: 'table'; rows: number; cols: number; data: TableCellContentSummary[][] }
+  | { type: 'image' }
+  | { type: 'shape'; kind: string }
+  | { type: 'container' };
 
 export interface TableCellContentSummary {
   text: string;
@@ -129,6 +132,15 @@ export class HwpxDocument {
     newText: string
   }> = [];
   private _pendingTableCellUpdates: Array<{ sectionIndex: number; tableIndex: number; tableId: string; row: number; col: number; text: string; charShapeId?: number }> = [];
+  private _pendingTableCellParagraphInserts: Array<{
+    sectionIndex: number;
+    tableIndex: number;
+    row: number;
+    col: number;
+    afterText: string;
+    text: string;
+    fontColor?: string;
+  }> = [];
   private _pendingNestedTableInserts: Array<{ sectionIndex: number; parentTableIndex: number; row: number; col: number; nestedRows: number; nestedCols: number; data: string[][] }> = [];
   private _pendingImageInserts: Array<{
     sectionIndex: number;
@@ -852,6 +864,35 @@ export class HwpxDocument {
     this.markModified();
     this.invalidateReadingCache();
     return afterElementIndex + 1;
+  }
+
+  insertParagraphInTableCell(
+    sectionIndex: number,
+    tableIndex: number,
+    row: number,
+    col: number,
+    afterText: string,
+    text: string,
+    options?: { fontColor?: string }
+  ): boolean {
+    const table = this.findTable(sectionIndex, tableIndex);
+    const cell = table?.rows?.[row]?.cells?.[col];
+    if (!table || !cell || !afterText) return false;
+
+    this.saveState();
+    this._pendingTableCellParagraphInserts.push({
+      sectionIndex,
+      tableIndex,
+      row,
+      col,
+      afterText,
+      text,
+      fontColor: options?.fontColor,
+    });
+
+    this.markModified();
+    this.invalidateReadingCache();
+    return true;
   }
 
   deleteParagraph(sectionIndex: number, elementIndex: number): boolean {
@@ -2695,8 +2736,20 @@ export class HwpxDocument {
           };
         }
 
-        const table = element.data as HwpxTable;
-        return this.buildTableContentTreeNode(table);
+        if (element.type === 'table') {
+          const table = element.data as HwpxTable;
+          return this.buildTableContentTreeNode(table);
+        }
+
+        if (element.type === 'image') {
+          return { type: 'image' as const };
+        }
+
+        if (element.type === 'container') {
+          return { type: 'container' as const };
+        }
+
+        return { type: 'shape' as const, kind: element.data.kind };
       });
     }
 
@@ -2743,6 +2796,49 @@ export class HwpxDocument {
 
   private getParagraphPlainText(paragraph: HwpxParagraph): string {
     return paragraph.runs.map(run => run.text).join('');
+  }
+
+  private findEnclosingParagraphEnd(xml: string, innerStartIndex: number): number | null {
+    const pOpenRegex = /<(hp|hs|hc):p\b[^>]*>/g;
+    let match: RegExpExecArray | null;
+    let lastOpen: { index: number; prefix: string } | null = null;
+
+    while ((match = pOpenRegex.exec(xml)) !== null) {
+      if (match.index >= innerStartIndex) break;
+      lastOpen = { index: match.index, prefix: match[1] };
+    }
+
+    if (!lastOpen) return null;
+
+    const closeTag = `</${lastOpen.prefix}:p>`;
+    const lastCloseBeforeInner = xml.lastIndexOf(closeTag, innerStartIndex);
+    if (lastCloseBeforeInner > lastOpen.index) return null;
+
+    return this.findParagraphEndFromStart(xml, lastOpen.index, lastOpen.prefix);
+  }
+
+  private findParagraphEndFromStart(xml: string, paragraphStartIndex: number, prefix: string): number | null {
+    const tagRegex = new RegExp(`<(/?)${prefix}:p\\b[^>]*>`, 'g');
+    tagRegex.lastIndex = paragraphStartIndex;
+
+    let depth = 0;
+    let match: RegExpExecArray | null;
+    while ((match = tagRegex.exec(xml)) !== null) {
+      const tag = match[0];
+      const isClosing = match[1] === '/';
+      const isSelfClosing = tag.endsWith('/>');
+
+      if (isClosing) {
+        depth--;
+        if (depth === 0) {
+          return match.index + tag.length;
+        }
+      } else if (!isSelfClosing) {
+        depth++;
+      }
+    }
+
+    return null;
   }
 
   updateTableCell(sectionIndex: number, tableIndex: number, row: number, col: number, text: string, charShapeId?: number): boolean {
@@ -4769,6 +4865,12 @@ export class HwpxDocument {
       this._pendingTableCellUpdates = [];
     }
 
+    // Apply paragraph inserts inside table cells without replacing the whole cell
+    if (this._pendingTableCellParagraphInserts && this._pendingTableCellParagraphInserts.length > 0) {
+      await this.applyTableCellParagraphInsertsToXml();
+      this._pendingTableCellParagraphInserts = [];
+    }
+
     // Apply cell merges
     if (this._pendingCellMerges && this._pendingCellMerges.length > 0) {
       await this.applyCellMergesToXml();
@@ -5588,57 +5690,42 @@ export class HwpxDocument {
         // Build paragraph XML
         const paragraphXml = `<hp:p id="${insert.paragraphId}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${escapedText}</hp:t></hp:run></hp:p>`;
 
-        // Find the position to insert
+        // Find the position to insert. Prefer locating the actual in-memory
+        // target element in XML, because HWPX often stores section-level tables
+        // inside hp:p/hp:run wrappers rather than as direct section children.
         let insertPosition = -1;
-        let elementCount = -1;
-        let searchPos = 0;
+        const section = this._content.sections[sectionIndex];
+        const memoryTarget = section?.elements[insert.afterElementIndex];
 
-        // Find paragraphs and tables at root level using balanced bracket matching
-        while (searchPos < xml.length) {
-          // Look for next <hp:p or <hp:tbl
-          const nextP = xml.indexOf('<hp:p ', searchPos);
-          const nextTbl = xml.indexOf('<hp:tbl ', searchPos);
-
-          let nextPos = -1;
-          let isTable = false;
-
-          if (nextP !== -1 && (nextTbl === -1 || nextP < nextTbl)) {
-            nextPos = nextP;
-            isTable = false;
-          } else if (nextTbl !== -1) {
-            nextPos = nextTbl;
-            isTable = true;
+        if (memoryTarget?.type === 'table') {
+          const table = memoryTarget.data as HwpxTable;
+          const tableMatch = this.findTableById(xml, table.id);
+          if (tableMatch) {
+            insertPosition = this.findEnclosingParagraphEnd(xml, tableMatch.startIndex) ?? tableMatch.endIndex;
           }
-
-          if (nextPos === -1) break;
-
-          // Check if this is inside a subList (nested)
-          const beforeText = xml.substring(Math.max(0, nextPos - HwpxDocument.NESTED_CHECK_LOOKBACK), nextPos);
-          const subListOpen = beforeText.lastIndexOf('<hp:subList');
-          const subListClose = beforeText.lastIndexOf('</hp:subList>');
-          const isNested = subListOpen > subListClose;
-
-          if (!isNested) {
-            elementCount++;
-
-            // Find the end of this element using balanced bracket matching
-            const endPos = isTable
-              ? HwpxDocument.findClosingTagPosition(xml, nextPos + 1, '<hp:tbl', '</hp:tbl>')
-              : HwpxDocument.findClosingTagPosition(xml, nextPos + 1, '<hp:p ', '</hp:p>');
-
-            if (endPos === -1) {
-              searchPos = nextPos + HwpxDocument.SEARCH_SKIP_OFFSET;
-              continue;
+        } else if (memoryTarget?.type === 'paragraph') {
+          const paragraph = memoryTarget.data as HwpxParagraph;
+          if (paragraph._xmlPosition?.sectionIndex === sectionIndex) {
+            insertPosition = paragraph._xmlPosition.end;
+          } else if (paragraph.id) {
+            const idPattern = new RegExp(`<(?:hp|hs|hc):p\\b[^>]*\\bid="${this.escapeRegex(paragraph.id)}"[^>]*>`);
+            const match = idPattern.exec(xml);
+            if (match) {
+              const prefix = match[0].match(/<(hp|hs|hc):p/)?.[1] || 'hp';
+              insertPosition = this.findParagraphEndFromStart(xml, match.index, prefix) ?? -1;
             }
+          }
+        }
 
-            if (elementCount === insert.afterElementIndex) {
-              insertPosition = endPos;
-              break;
-            }
-
-            searchPos = endPos;
-          } else {
-            searchPos = nextPos + HwpxDocument.SEARCH_SKIP_OFFSET;
+        if (insertPosition === -1) {
+          const topLevelElements = this.findTopLevelElements(xml);
+          const targetElement = topLevelElements[insert.afterElementIndex];
+          if (targetElement) {
+            const prefixMatch = targetElement.content.match(/<(hp|hs|hc):/);
+            const prefix = prefixMatch ? prefixMatch[1] : 'hp';
+            insertPosition = targetElement.type === 'tbl'
+              ? HwpxDocument.findClosingTagPosition(xml, targetElement.start + 1, `<${prefix}:tbl`, `</${prefix}:tbl>`)
+              : this.findParagraphEndFromStart(xml, targetElement.start, prefix) ?? -1;
           }
         }
 
@@ -12252,7 +12339,8 @@ export class HwpxDocument {
         const fontName = update.style.fontName || '함초롬바탕';
         const bold = update.style.bold ? '1' : '0';
         const italic = update.style.italic ? '1' : '0';
-        const styleKey = `${fontName}-${fontSize}-${bold}-${italic}`;
+        const fontColor = update.style.fontColor || '#000000';
+        const styleKey = `${fontName}-${fontSize}-${bold}-${italic}-${fontColor}`;
 
         let charPrId: number;
         if (styleToIdMap.has(styleKey)) {
@@ -12275,7 +12363,7 @@ export class HwpxDocument {
           const italicTag = italic === '1' ? '<hh:italic/>' : '';
 
           // Reconstruct from base, inserting fontRef first
-          const charPr = `      <hh:charPr id="${charPrId}" height="${fontSize}" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">
+          const charPr = `      <hh:charPr id="${charPrId}" height="${fontSize}" textColor="${fontColor}" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="1">
         ${fontRefStr}
         ${baseInnerXml}${boldTag ? '\n        ' + boldTag : ''}${italicTag ? '\n        ' + italicTag : ''}
       </hh:charPr>`;
@@ -12704,6 +12792,135 @@ export class HwpxDocument {
       startIndex: absoluteStart,
       endIndex: absoluteEnd,
     };
+  }
+
+  private findDirectParagraphsInCell(cellXml: string): Array<{ xml: string; startIndex: number; endIndex: number }> {
+    const nestedTables = this.findAllElementsWithDepth(cellXml, 'tbl');
+    const paragraphs = this.findAllElementsWithDepth(cellXml, 'p');
+
+    return paragraphs.filter((paragraph) =>
+      !nestedTables.some((table) =>
+        paragraph.startIndex >= table.startIndex && paragraph.startIndex < table.endIndex
+      )
+    );
+  }
+
+  private async getOrCreateCharPrForFontColor(fontColor: string): Promise<number> {
+    if (!this._zip) return 0;
+
+    const headerPath = 'Contents/header.xml';
+    let headerXml = await this._zip.file(headerPath)?.async('string');
+    if (!headerXml) return 0;
+
+    const existingRegex = /<hh:charPr\b[^>]*id="(\d+)"[^>]*textColor="([^"]*)"[\s\S]*?<\/hh:charPr>/g;
+    let match;
+    let maxCharPrId = 0;
+    while ((match = existingRegex.exec(headerXml)) !== null) {
+      const id = parseInt(match[1], 10);
+      maxCharPrId = Math.max(maxCharPrId, id);
+      if (match[2].toLowerCase() === fontColor.toLowerCase()) {
+        return id;
+      }
+    }
+
+    const charPrIdRegex = /<hh:charPr\b[^>]*id="(\d+)"/g;
+    while ((match = charPrIdRegex.exec(headerXml)) !== null) {
+      maxCharPrId = Math.max(maxCharPrId, parseInt(match[1], 10));
+    }
+
+    const baseCharPrMatch = headerXml.match(/<hh:charPr\b[^>]*id="0"[\s\S]*?<\/hh:charPr>/);
+    if (!baseCharPrMatch) return 0;
+
+    const newCharPrId = maxCharPrId + 1;
+    let newCharPr = baseCharPrMatch[0].replace(/\bid="0"/, `id="${newCharPrId}"`);
+    if (/textColor="[^"]*"/.test(newCharPr)) {
+      newCharPr = newCharPr.replace(/textColor="[^"]*"/, `textColor="${fontColor}"`);
+    } else {
+      newCharPr = newCharPr.replace(/<hh:charPr\b/, `<hh:charPr textColor="${fontColor}"`);
+    }
+
+    headerXml = headerXml.replace(
+      /<hh:charProperties\b([^>]*)itemCnt="(\d+)"/,
+      (_full, before, count) => `<hh:charProperties${before}itemCnt="${parseInt(count, 10) + 1}"`
+    );
+    headerXml = headerXml.replace('</hh:charProperties>', `${newCharPr}\n    </hh:charProperties>`);
+    this._zip.file(headerPath, headerXml);
+
+    return newCharPrId;
+  }
+
+  private async applyTableCellParagraphInsertsToXml(): Promise<void> {
+    if (!this._zip) return;
+
+    const insertsBySection = new Map<number, typeof this._pendingTableCellParagraphInserts>();
+    for (const insert of this._pendingTableCellParagraphInserts) {
+      const existing = insertsBySection.get(insert.sectionIndex) || [];
+      existing.push(insert);
+      insertsBySection.set(insert.sectionIndex, existing);
+    }
+
+    for (const [sectionIndex, inserts] of insertsBySection) {
+      const sectionPath = `Contents/section${sectionIndex}.xml`;
+      let sectionXml = await this._zip.file(sectionPath)?.async('string');
+      if (!sectionXml) continue;
+
+      const insertsByTable = new Map<number, typeof inserts>();
+      for (const insert of inserts) {
+        const existing = insertsByTable.get(insert.tableIndex) || [];
+        existing.push(insert);
+        insertsByTable.set(insert.tableIndex, existing);
+      }
+
+      const sortedTableIndices = [...insertsByTable.keys()].sort((a, b) => b - a);
+      for (const tableIndex of sortedTableIndices) {
+        const tables = this.findAllTables(sectionXml);
+        if (tableIndex >= tables.length) continue;
+
+        const tableData = tables[tableIndex];
+        let tableXml = tableData.xml;
+        const tableInserts = insertsByTable.get(tableIndex)!;
+
+        for (const insert of tableInserts) {
+          const cellInfo = this.findTableCellInXml(tableXml, insert.row, insert.col);
+          if (!cellInfo) continue;
+
+          const directParagraphs = this.findDirectParagraphsInCell(cellInfo.xml);
+          const normalizedAfterText = insert.afterText.toLowerCase().trim();
+          const targetParagraph = directParagraphs.find((paragraph) =>
+            this.extractTextFromParagraphXml(paragraph.xml).toLowerCase().includes(normalizedAfterText)
+          );
+          if (!targetParagraph) continue;
+
+          const prefixMatch = targetParagraph.xml.match(/^<(hp|hs|hc):p\b/);
+          const prefix = prefixMatch?.[1] || 'hp';
+          const pOpenMatch = targetParagraph.xml.match(/^<[^:]+:p\b([^>]*)>/);
+          const runMatch = targetParagraph.xml.match(/<[^:]+:run\b[^>]*charPrIDRef="(\d+)"/);
+          const paraPrMatch = pOpenMatch?.[1].match(/paraPrIDRef="(\d+)"/);
+          const styleMatch = pOpenMatch?.[1].match(/styleIDRef="(\d+)"/);
+          const paraPrIDRef = paraPrMatch?.[1] || '0';
+          const styleIDRef = styleMatch?.[1] || '0';
+          const charPrIDRef = insert.fontColor
+            ? await this.getOrCreateCharPrForFontColor(insert.fontColor)
+            : parseInt(runMatch?.[1] || '0', 10);
+          const paragraphId = Math.random().toString(36).substring(2, 11);
+          const escapedText = escapeXmlText(insert.text);
+          const newParagraph = `<${prefix}:p id="${paragraphId}" paraPrIDRef="${paraPrIDRef}" styleIDRef="${styleIDRef}" pageBreak="0" columnBreak="0" merged="0"><${prefix}:run charPrIDRef="${charPrIDRef}"><${prefix}:t>${escapedText}</${prefix}:t></${prefix}:run><${prefix}:linesegarray><${prefix}:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="0" flags="0"/></${prefix}:linesegarray></${prefix}:p>`;
+
+          const updatedCellXml = cellInfo.xml.slice(0, targetParagraph.endIndex) +
+            newParagraph +
+            cellInfo.xml.slice(targetParagraph.endIndex);
+          tableXml = tableXml.slice(0, cellInfo.startIndex) +
+            updatedCellXml +
+            tableXml.slice(cellInfo.endIndex);
+        }
+
+        sectionXml = sectionXml.slice(0, tableData.startIndex) +
+          tableXml +
+          sectionXml.slice(tableData.endIndex);
+      }
+
+      this._zip.file(sectionPath, sectionXml);
+    }
   }
 
   // ============================================================

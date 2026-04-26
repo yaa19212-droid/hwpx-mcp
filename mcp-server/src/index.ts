@@ -225,6 +225,24 @@ Example: get_tool_guide({ workflow: "template" })`,
     },
   },
   {
+    name: 'insert_paragraph_in_table_cell',
+    description: 'Insert a new paragraph inside a table cell after the direct cell paragraph containing after_text (HWPX only). Preserves nested tables and existing cell content.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        section_index: { type: 'number', description: 'Section index' },
+        table_index: { type: 'number', description: 'Table index in the section' },
+        row: { type: 'number', description: 'Cell row index' },
+        col: { type: 'number', description: 'Cell column index' },
+        after_text: { type: 'string', description: 'Text to find in a direct paragraph inside the cell' },
+        text: { type: 'string', description: 'Paragraph text to insert' },
+        font_color: { type: 'string', description: 'Optional text color (hex, e.g. #0000FF)' },
+      },
+      required: ['doc_id', 'section_index', 'table_index', 'row', 'col', 'after_text', 'text'],
+    },
+  },
+  {
     name: 'delete_paragraph',
     description: 'Delete a paragraph (HWPX only)',
     inputSchema: {
@@ -2575,6 +2593,25 @@ Call get_tool_guide with: template, table, image, search, read, create`
           return success({ message: `Paragraph inserted with hanging indent: ${indentPt.toFixed(2)}pt`, index, indent_pt: indentPt });
         }
         return success({ message: 'Paragraph inserted', index });
+      }
+
+      case 'insert_paragraph_in_table_cell': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        if (doc.format === 'hwp') return error('HWP files are read-only');
+
+        const ok = doc.insertParagraphInTableCell(
+          args?.section_index as number,
+          args?.table_index as number,
+          args?.row as number,
+          args?.col as number,
+          args?.after_text as string,
+          args?.text as string,
+          args?.font_color ? { fontColor: args.font_color as string } : undefined
+        );
+
+        if (!ok) return error('Failed to insert paragraph in table cell');
+        return success({ message: 'Paragraph inserted in table cell' });
       }
 
       case 'delete_paragraph': {

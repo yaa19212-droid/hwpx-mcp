@@ -853,7 +853,10 @@ export interface CellMargin {
 
 export type CellElement =
   | { type: 'paragraph'; data: HwpxParagraph }
-  | { type: 'table'; data: HwpxTable };
+  | { type: 'table'; data: HwpxTable }
+  | { type: 'image'; data: { xml: string } }
+  | { type: 'shape'; data: { kind: string; xml: string } }
+  | { type: 'container'; data: { xml: string } };
 
 export interface TableCell {
   name?: string;
