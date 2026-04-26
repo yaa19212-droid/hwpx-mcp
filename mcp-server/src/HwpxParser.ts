@@ -1254,16 +1254,16 @@ export class HwpxParser {
         originalTableRanges.push({ start: tableIndex, end: tableIndex + tableXml.length });
       }
     }
+    const originalContainerRanges = this.extractBalancedTagRanges(xml, 'hp:container');
     // Build list of top-level paragraphs in original XML (not inside tables)
     const originalTopLevelParas: { start: number; end: number; xml: string }[] = [];
     for (const para of originalParagraphs) {
-      const isInsideTable = originalTableRanges.some(
-        range => para.start > range.start && para.start < range.end
-      );
+      const isInsideTable = originalTableRanges.some(range => para.start > range.start && para.start < range.end);
+      const isInsideContainer = originalContainerRanges.some(range => para.start > range.start && para.start < range.end);
       const containsTable = originalTableRanges.some(
         range => range.start >= para.start && range.end <= para.end
       );
-      if (!isInsideTable) {
+      if (!isInsideTable && !isInsideContainer) {
         if (containsTable) {
           // Check if paragraph has text content after removing table
           let paraXmlWithoutTable = para.xml;
@@ -1331,17 +1331,17 @@ export class HwpxParser {
       elements.push({ index: tableIndex, type: 'tbl', xml: tableXml, parentLinesegs });
       tableRanges.push({ start: tableIndex, end: tableIndex + tableXml.length });
     }
+    const containerRanges = this.extractBalancedTagRanges(cleanedXml, 'hp:container');
 
     // Add paragraphs that are not inside tables
     // For paragraphs that contain tables, still parse the text content (excluding the table XML)
     for (const para of paragraphs) {
-      const isInsideTable = tableRanges.some(
-        range => para.start > range.start && para.start < range.end
-      );
+      const isInsideTable = tableRanges.some(range => para.start > range.start && para.start < range.end);
+      const isInsideContainer = containerRanges.some(range => para.start > range.start && para.start < range.end);
       const containsTable = tableRanges.some(
         range => range.start >= para.start && range.end <= para.end
       );
-      if (!isInsideTable) {
+      if (!isInsideTable && !isInsideContainer) {
         // Get corresponding original XML position for this top-level paragraph
         const origPos = originalParaIndex < originalTopLevelParas.length
           ? { start: originalTopLevelParas[originalParaIndex].start, end: originalTopLevelParas[originalParaIndex].end }
@@ -1373,25 +1373,27 @@ export class HwpxParser {
     }
 
     const isInsideOriginalTable = (index: number) => this.isInsideRanges(index, originalTableRanges);
+    const isInsideOriginalContainer = (index: number) => this.isInsideRanges(index, originalContainerRanges);
+    const isInsideOriginalTableOrContainer = (index: number) => isInsideOriginalTable(index) || isInsideOriginalContainer(index);
 
     const lineRegex = /<hp:line\b[^>]*(?:\/>|>[\s\S]*?<\/hp:line>)/g;
     let lineMatch;
     while ((lineMatch = lineRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(lineMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(lineMatch.index)) continue;
       elements.push({ index: lineMatch.index, type: 'line', xml: lineMatch[0] });
     }
 
     const rectRegex = /<hp:rect\b[^>]*(?:\/>|>[\s\S]*?<\/hp:rect>)/g;
     let rectMatch;
     while ((rectMatch = rectRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(rectMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(rectMatch.index)) continue;
       elements.push({ index: rectMatch.index, type: 'rect', xml: rectMatch[0] });
     }
 
     const ellipseRegex = /<hp:ellipse\b[^>]*(?:\/>|>[\s\S]*?<\/hp:ellipse>)/g;
     let ellipseMatch;
     while ((ellipseMatch = ellipseRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(ellipseMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(ellipseMatch.index)) continue;
       elements.push({ index: ellipseMatch.index, type: 'ellipse', xml: ellipseMatch[0] });
     }
 
@@ -1399,7 +1401,7 @@ export class HwpxParser {
     const arcRegex = /<hp:arc\b[^>]*(?:\/>|>[\s\S]*?<\/hp:arc>)/g;
     let arcMatch;
     while ((arcMatch = arcRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(arcMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(arcMatch.index)) continue;
       elements.push({ index: arcMatch.index, type: 'arc', xml: arcMatch[0] });
     }
 
@@ -1407,7 +1409,7 @@ export class HwpxParser {
     const polygonRegex = /<hp:polygon\b[^>]*(?:\/>|>[\s\S]*?<\/hp:polygon>)/g;
     let polygonMatch;
     while ((polygonMatch = polygonRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(polygonMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(polygonMatch.index)) continue;
       elements.push({ index: polygonMatch.index, type: 'polygon', xml: polygonMatch[0] });
     }
 
@@ -1415,7 +1417,7 @@ export class HwpxParser {
     const curveRegex = /<hp:curve\b[^>]*(?:\/>|>[\s\S]*?<\/hp:curve>)/g;
     let curveMatch;
     while ((curveMatch = curveRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(curveMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(curveMatch.index)) continue;
       elements.push({ index: curveMatch.index, type: 'curve', xml: curveMatch[0] });
     }
 
@@ -1423,15 +1425,17 @@ export class HwpxParser {
     const connectLineRegex = /<hp:connectLine\b[^>]*(?:\/>|>[\s\S]*?<\/hp:connectLine>)/g;
     let connectLineMatch;
     while ((connectLineMatch = connectLineRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(connectLineMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(connectLineMatch.index)) continue;
       elements.push({ index: connectLineMatch.index, type: 'connectline', xml: connectLineMatch[0] });
     }
 
     // Container (묶음객체)
     const containerRegex = /<hp:container\b[^>]*>[\s\S]*?<\/hp:container>/g;
-    let containerMatch;
+    let containerMatch: RegExpExecArray | null;
     while ((containerMatch = containerRegex.exec(xml)) !== null) {
       if (isInsideOriginalTable(containerMatch.index)) continue;
+      const containerIndex = containerMatch.index;
+      if (this.isInsideRanges(containerIndex, originalContainerRanges.filter(range => range.start !== containerIndex))) continue;
       elements.push({ index: containerMatch.index, type: 'container', xml: containerMatch[0] });
     }
 
@@ -1520,7 +1524,7 @@ export class HwpxParser {
     const picRegex = /<hp:pic\b[^>]*>[\s\S]*?<\/hp:pic>/g;
     let picMatch;
     while ((picMatch = picRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(picMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(picMatch.index)) continue;
       elements.push({ index: picMatch.index, type: 'pic', xml: picMatch[0] });
     }
 
@@ -1536,7 +1540,7 @@ export class HwpxParser {
     const chartRegex = /<hp:chart\b[^>]*(?:\/>|>[\s\S]*?<\/hp:chart>)/g;
     let chartMatch;
     while ((chartMatch = chartRegex.exec(xml)) !== null) {
-      if (isInsideOriginalTable(chartMatch.index)) continue;
+      if (isInsideOriginalTableOrContainer(chartMatch.index)) continue;
       elements.push({ index: chartMatch.index, type: 'chart', xml: chartMatch[0] });
     }
 
@@ -1588,31 +1592,40 @@ export class HwpxParser {
       } else if (el.type === 'pic') {
         const image = this.parseImageElement(el.xml, content);
         if (image) {
+          (image as any).sourceXml = el.xml;
           section.elements.push({ type: 'image', data: image });
         }
       } else if (el.type === 'line') {
         const line = this.parseLine(el.xml);
+        (line as any).sourceXml = el.xml;
         section.elements.push({ type: 'line', data: line });
       } else if (el.type === 'rect') {
         const rect = this.parseRect(el.xml);
+        (rect as any).sourceXml = el.xml;
         section.elements.push({ type: 'rect', data: rect });
       } else if (el.type === 'ellipse') {
         const ellipse = this.parseEllipse(el.xml);
+        (ellipse as any).sourceXml = el.xml;
         section.elements.push({ type: 'ellipse', data: ellipse });
       } else if (el.type === 'arc') {
         const arc = this.parseArc(el.xml);
+        (arc as any).sourceXml = el.xml;
         section.elements.push({ type: 'arc', data: arc });
       } else if (el.type === 'polygon') {
         const polygon = this.parsePolygon(el.xml);
+        (polygon as any).sourceXml = el.xml;
         section.elements.push({ type: 'polygon', data: polygon });
       } else if (el.type === 'curve') {
         const curve = this.parseCurve(el.xml);
+        (curve as any).sourceXml = el.xml;
         section.elements.push({ type: 'curve', data: curve });
       } else if (el.type === 'connectline') {
         const connectLine = this.parseConnectLine(el.xml);
+        (connectLine as any).sourceXml = el.xml;
         section.elements.push({ type: 'connectline', data: connectLine });
       } else if (el.type === 'container') {
         const container = this.parseContainer(el.xml, content);
+        (container as any).sourceXml = el.xml;
         section.elements.push({ type: 'container', data: container });
       } else if (el.type === 'ole') {
         const ole = this.parseOle(el.xml);

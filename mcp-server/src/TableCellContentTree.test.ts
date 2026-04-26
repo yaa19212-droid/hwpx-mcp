@@ -123,11 +123,73 @@ async function createTableWithCellVisualObjectDocument(): Promise<Buffer> {
             </hp:rect>
             <hp:pic id="chart_image"><hc:img binaryItemIDRef="image2"/></hp:pic>
           </hp:container>
+          <hp:chart id="direct_chart" binaryItemIDRef="image2"/>
         </hp:subList>
       </hp:tc>
     </hp:tr>
   </hp:tbl>
   <hp:p id="after"><hp:run><hp:t>After table paragraph</hp:t></hp:run></hp:p>
+</hs:sec>`);
+
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+async function createSectionLevelContainerDocument(): Promise<Buffer> {
+  const zip = new JSZip();
+
+  zip.file('mimetype', 'application/hwp+zip');
+  zip.file('version.xml', '<?xml version="1.0"?><hwpml version="1.0"/>');
+  zip.file('Contents/content.hpf', '<?xml version="1.0"?><pkg:package xmlns:pkg="http://www.hancom.co.kr/hwpml/2011/package"><pkg:manifest><pkg:item id="section0" href="section0.xml"/><pkg:item id="image2" href="BinData/image2.png" media-type="image/png"/></pkg:manifest></pkg:package>');
+  zip.file('BinData/image2.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64'));
+  zip.file('Contents/header.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
+  <hh:docInfo><hh:title>Section Container Test</hh:title></hh:docInfo>
+</hh:head>`);
+  zip.file('Contents/section0.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+        xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">
+  <hp:p id="heading"><hp:run><hp:t>PPT 4 page</hp:t></hp:run></hp:p>
+  <hp:container id="outside_chart">
+    <hp:rect id="outside_label">
+      <hp:drawText><hp:p id="label_para"><hp:run><hp:t>도표 라벨</hp:t></hp:run></hp:p></hp:drawText>
+    </hp:rect>
+    <hp:pic id="outside_image"><hc:img binaryItemIDRef="image2"/></hp:pic>
+  </hp:container>
+  <hp:p id="next"><hp:run><hp:t>PPT 5 page</hp:t></hp:run></hp:p>
+</hs:sec>`);
+
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+async function createNestedTableVisualDocument(): Promise<Buffer> {
+  const zip = new JSZip();
+
+  zip.file('mimetype', 'application/hwp+zip');
+  zip.file('version.xml', '<?xml version="1.0"?><hwpml version="1.0"/>');
+  zip.file('Contents/content.hpf', '<?xml version="1.0"?><pkg:package xmlns:pkg="http://www.hancom.co.kr/hwpml/2011/package"><pkg:manifest><pkg:item id="section0" href="section0.xml"/><pkg:item id="image2" href="BinData/image2.png" media-type="image/png"/></pkg:manifest></pkg:package>');
+  zip.file('BinData/image2.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64'));
+  zip.file('Contents/header.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
+  <hh:docInfo><hh:title>Nested Visual Test</hh:title></hh:docInfo>
+</hh:head>`);
+  zip.file('Contents/section0.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+        xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">
+  <hp:p id="heading"><hp:run><hp:t>PPT 6 page</hp:t></hp:run></hp:p>
+  <hp:tbl id="outer" rowCnt="1" colCnt="1">
+    <hp:tr><hp:tc colAddr="0" rowAddr="0"><hp:subList>
+      <hp:tbl id="inner" rowCnt="1" colCnt="1">
+        <hp:tr><hp:tc colAddr="0" rowAddr="0"><hp:subList>
+          <hp:container id="inner_visual">
+            <hp:rect id="inner_label"><hp:drawText><hp:p id="inner_label_para"><hp:run><hp:t>중첩 라벨</hp:t></hp:run></hp:p></hp:drawText></hp:rect>
+            <hp:chart id="inner_chart" binaryItemIDRef="image2"/>
+          </hp:container>
+        </hp:subList></hp:tc></hp:tr>
+      </hp:tbl>
+    </hp:subList></hp:tc></hp:tr>
+  </hp:tbl>
 </hs:sec>`);
 
   return zip.generateAsync({ type: 'nodebuffer' });
@@ -257,6 +319,13 @@ describe('Table cell content tree', () => {
       shape_count: 1,
       requires_visual_read: true,
     });
+    expect(table?.data[0][1].content_tree[1]).toMatchObject({
+      type: 'shape',
+      kind: 'chart',
+      image_refs: ['image2'],
+      binary_id: 'image2',
+      requires_visual_read: true,
+    });
     expect(context?.elements_after[0]).toMatchObject({
       type: 'paragraph',
       text: 'After table paragraph',
@@ -306,5 +375,52 @@ describe('Table cell content tree', () => {
       filename: 'BinData/image2.png',
     });
     expect(asset?.base64.length).toBeGreaterThan(20);
+  });
+
+  it('keeps section-level container labels in content range summaries', async () => {
+    const buffer = await createSectionLevelContainerDocument();
+    const doc = await HwpxDocument.createFromBuffer('section-container-test', 'section-container-test.hwpx', buffer);
+
+    const range = doc.findContentRangeAfterHeading('PPT 4 page');
+    expect(range).toMatchObject({
+      section_index: 0,
+      start_element_index: 0,
+      end_element_index: 1,
+      end_reason: 'next_heading',
+      end_heading: 'PPT 5 page',
+    });
+
+    const content = doc.getContentRange(0, range!.start_element_index, range!.end_element_index);
+    expect(content?.items[1]).toMatchObject({
+      type: 'container',
+      texts: ['도표 라벨'],
+      image_refs: ['image2'],
+      requires_visual_read: true,
+    });
+    expect(content?.visuals[0]).toMatchObject({
+      type: 'container',
+      binary_id: 'image2',
+      scope: { section_index: 0, element_index: 1 },
+    });
+  });
+
+  it('recurses nested table visuals in getTableCellVisuals and exposes shape image refs', async () => {
+    const buffer = await createNestedTableVisualDocument();
+    const doc = await HwpxDocument.createFromBuffer('nested-visual-test', 'nested-visual-test.hwpx', buffer);
+
+    const visuals = doc.getTableCellVisuals(0, 0, 0, 0);
+    expect(visuals?.containers[0]).toMatchObject({
+      type: 'container',
+      texts: ['중첩 라벨'],
+      image_refs: ['image2'],
+      requires_visual_read: true,
+    });
+
+    const content = doc.getContentRange(0, 0, 1);
+    expect(content?.visuals[0]).toMatchObject({
+      type: 'container',
+      binary_id: 'image2',
+      scope: { section_index: 0, element_index: 1, table_index: 0, row: 0, col: 0 },
+    });
   });
 });

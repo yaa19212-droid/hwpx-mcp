@@ -119,7 +119,10 @@ export interface ShapeContentTreeNode {
   kind: string;
   texts?: string[];
   text?: string;
-  requires_visual_read?: boolean;
+  image_refs?: string[];
+  binary_id?: string;
+  mime_type?: string;
+  requires_visual_read: boolean;
 }
 
 export interface ContainerContentTreeNode {
@@ -2707,11 +2710,12 @@ export class HwpxDocument {
           const summary = this.summarizeSectionVisualElement(element);
           items.push({ ...summary, element_index: i });
           if (includeVisualSummary && summary.requires_visual_read) {
-            visuals.push({
-              ...summary,
-              visual_id: `section${sectionIndex}_element${i}_${element.type}`,
-              scope: { section_index: sectionIndex, element_index: i },
-            });
+            this.pushVisualFromSummary(
+              summary,
+              `section${sectionIndex}_element${i}_${element.type}`,
+              { section_index: sectionIndex, element_index: i },
+              visuals
+            );
           }
         }
       }
@@ -3004,13 +3008,66 @@ export class HwpxDocument {
     const shapes: ShapeContentTreeNode[] = [];
     const containers: ContainerContentTreeNode[] = [];
 
-    for (const node of cell.content_tree) {
+    const collect = (nodes: CellContentTreeNode[]): void => {
+      for (const node of nodes) {
       if (node.type === 'image') images.push(node);
       if (node.type === 'shape') shapes.push(node);
       if (node.type === 'container') containers.push(node);
-    }
+        if (node.type === 'table') {
+          for (const nestedRow of node.data) {
+            for (const nestedCell of nestedRow) {
+              collect(nestedCell.content_tree);
+            }
+          }
+        }
+      }
+    };
+
+    collect(cell.content_tree);
 
     return { images, shapes, containers };
+  }
+
+  private pushVisualFromSummary(
+    summary: VisualSummary,
+    visualIdBase: string,
+    scope: ContentRangeVisual['scope'],
+    visuals: ContentRangeVisual[]
+  ): void {
+    if (summary.type === 'container') {
+      for (const imageRef of summary.image_refs || []) {
+        visuals.push({
+          ...summary,
+          binary_id: imageRef,
+          mime_type: this.inferMimeType(imageRef),
+          visual_id: `${visualIdBase}_${imageRef}`,
+          scope,
+        });
+      }
+      return;
+    }
+
+    const imageRefs = summary.image_refs || (summary.binary_id ? [summary.binary_id] : []);
+    if (imageRefs.length > 0) {
+      for (const imageRef of imageRefs) {
+        visuals.push({
+          ...summary,
+          binary_id: imageRef,
+          mime_type: this.inferMimeType(imageRef),
+          visual_id: `${visualIdBase}_${imageRef}`,
+          scope,
+        });
+      }
+      return;
+    }
+
+    if (summary.requires_visual_read) {
+      visuals.push({
+        ...summary,
+        visual_id: visualIdBase,
+        scope,
+      });
+    }
   }
 
   private collectCellVisuals(
@@ -3024,22 +3081,26 @@ export class HwpxDocument {
   ): void {
     contentTree.forEach((node, index) => {
       if (node.type === 'image' && node.requires_visual_read) {
-        visuals.push({
-          ...node,
-          visual_id: `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_image${index}`,
-          scope: { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
-        });
+        this.pushVisualFromSummary(
+          node,
+          `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_image${index}`,
+          { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
+          visuals
+        );
       } else if (node.type === 'container') {
-        for (const imageRef of node.image_refs) {
-          visuals.push({
-            ...node,
-            type: 'container',
-            binary_id: imageRef,
-            mime_type: this.inferMimeType(imageRef),
-            visual_id: `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_container${index}_${imageRef}`,
-            scope: { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
-          });
-        }
+        this.pushVisualFromSummary(
+          node,
+          `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_container${index}`,
+          { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
+          visuals
+        );
+      } else if (node.type === 'shape' && node.requires_visual_read) {
+        this.pushVisualFromSummary(
+          node,
+          `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_shape${index}`,
+          { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
+          visuals
+        );
       } else if (node.type === 'table') {
         for (const nestedRow of node.data) {
           for (const nestedCell of nestedRow) {
@@ -3083,6 +3144,11 @@ export class HwpxDocument {
       type: 'shape',
       kind: kind || 'shape',
       ...(texts.length > 0 ? { texts, text: texts.join('\n') } : {}),
+      ...(imageRefs.length > 0 ? {
+        image_refs: imageRefs,
+        binary_id: imageRefs[0],
+        mime_type: this.inferMimeType(imageRefs[0]),
+      } : {}),
       requires_visual_read: imageRefs.length > 0,
     };
   }
@@ -3099,6 +3165,13 @@ export class HwpxDocument {
   }
 
   private summarizeSectionVisualElement(element: SectionElement): VisualSummary {
+    const sourceXml = (element.data as any)?.sourceXml;
+    if (sourceXml && (element.type === 'container' || element.type === 'image' || this.isShapeElementType(element.type))) {
+      if (element.type === 'container') return this.summarizeVisualXml(sourceXml, 'container');
+      if (element.type === 'image') return this.summarizeVisualXml(sourceXml, 'image');
+      return this.summarizeVisualXml(sourceXml, 'shape', element.type);
+    }
+
     if (element.type === 'container') {
       const container = element.data as any;
       const imageRefs: string[] = [];
@@ -3134,6 +3207,10 @@ export class HwpxDocument {
       kind: element.type,
       requires_visual_read: false,
     };
+  }
+
+  private isShapeElementType(type: string): boolean {
+    return ['line', 'rect', 'ellipse', 'arc', 'polygon', 'curve', 'connectline'].includes(type);
   }
 
   private extractXmlTexts(xml: string): string[] {
