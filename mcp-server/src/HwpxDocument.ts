@@ -101,15 +101,76 @@ export interface PositionIndexEntry {
 export type CellContentTreeNode =
   | { type: 'paragraph'; text: string; paragraph_id?: string }
   | { type: 'table'; rows: number; cols: number; data: TableCellContentSummary[][] }
-  | { type: 'image' }
-  | { type: 'shape'; kind: string }
-  | { type: 'container' };
+  | ImageContentTreeNode
+  | ShapeContentTreeNode
+  | ContainerContentTreeNode;
+
+export interface ImageContentTreeNode {
+  type: 'image';
+  binary_id?: string;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+  requires_visual_read: boolean;
+}
+
+export interface ShapeContentTreeNode {
+  type: 'shape';
+  kind: string;
+  texts?: string[];
+  text?: string;
+  requires_visual_read?: boolean;
+}
+
+export interface ContainerContentTreeNode {
+  type: 'container';
+  container_kind: 'grouped_visual';
+  texts: string[];
+  image_refs: string[];
+  image_count: number;
+  shape_count: number;
+  shape_comments?: string[];
+  requires_visual_read: boolean;
+}
 
 export interface TableCellContentSummary {
   text: string;
   content_tree: CellContentTreeNode[];
   has_nested_tables: boolean;
   nested_table_count: number;
+}
+
+export interface VisualSummary {
+  type: 'image' | 'shape' | 'container';
+  binary_id?: string;
+  mime_type?: string;
+  kind?: string;
+  container_kind?: 'grouped_visual';
+  texts?: string[];
+  image_refs?: string[];
+  image_count?: number;
+  shape_count?: number;
+  shape_comments?: string[];
+  requires_visual_read: boolean;
+}
+
+export interface ContentRangeVisual extends VisualSummary {
+  visual_id: string;
+  scope: {
+    section_index: number;
+    element_index: number;
+    table_index?: number;
+    row?: number;
+    col?: number;
+    content_tree_index?: number;
+  };
+}
+
+export interface VisualAsset {
+  binary_id: string;
+  mime_type: string;
+  filename: string;
+  base64: string;
 }
 
 export class HwpxDocument {
@@ -2527,6 +2588,146 @@ export class HwpxDocument {
     };
   }
 
+  findContentRangeAfterHeading(
+    headingText: string,
+    options: { sectionIndex?: number; untilNextHeading?: boolean; headingPattern?: string } = {}
+  ): {
+    section_index: number;
+    start_element_index: number;
+    end_element_index: number;
+    start_heading: string;
+    end_reason: 'next_heading' | 'section_end' | 'single_element';
+    end_heading?: string;
+  } | null {
+    const matches = this.findParagraphByText(headingText, options.sectionIndex);
+    if (matches.length === 0) return null;
+
+    const match = matches[0];
+    const section = this._content.sections[match.section_index];
+    if (!section) return null;
+
+    const untilNextHeading = options.untilNextHeading !== false;
+    let endElementIndex = match.element_index;
+    let endReason: 'next_heading' | 'section_end' | 'single_element' = 'single_element';
+    let endHeading: string | undefined;
+
+    if (untilNextHeading) {
+      const inferredHeadingPattern = options.headingPattern || this.inferSiblingHeadingPattern(headingText);
+      const headingRegex = inferredHeadingPattern ? new RegExp(inferredHeadingPattern, 'i') : null;
+      endElementIndex = section.elements.length - 1;
+      endReason = 'section_end';
+
+      for (let i = match.element_index + 1; i < section.elements.length; i++) {
+        const element = section.elements[i];
+        if (element.type !== 'paragraph') continue;
+
+        const text = this.getParagraphPlainText(element.data as HwpxParagraph).trim();
+        const isNextHeading = headingRegex ? headingRegex.test(text) : false;
+        if (isNextHeading) {
+          endElementIndex = i - 1;
+          endReason = 'next_heading';
+          endHeading = text;
+          break;
+        }
+      }
+    }
+
+    return {
+      section_index: match.section_index,
+      start_element_index: match.element_index,
+      end_element_index: endElementIndex,
+      start_heading: match.text,
+      end_reason: endReason,
+      ...(endHeading ? { end_heading: endHeading } : {}),
+    };
+  }
+
+  getContentRange(
+    sectionIndex: number,
+    startElementIndex: number,
+    endElementIndex: number,
+    options: { includeVisualSummary?: boolean } = {}
+  ): { section_index: number; start_element_index: number; end_element_index: number; items: any[]; visuals: ContentRangeVisual[] } | null {
+    const section = this._content.sections[sectionIndex];
+    if (!section) return null;
+
+    const start = Math.max(0, startElementIndex);
+    const end = Math.min(section.elements.length - 1, endElementIndex);
+    if (start > end) return null;
+
+    const includeVisualSummary = options.includeVisualSummary !== false;
+    const items: any[] = [];
+    const visuals: ContentRangeVisual[] = [];
+    let tableIndex = 0;
+
+    for (let i = 0; i < section.elements.length; i++) {
+      const element = section.elements[i];
+      const currentTableIndex = element.type === 'table' ? tableIndex : undefined;
+
+      if (i >= start && i <= end) {
+        if (element.type === 'paragraph') {
+          const paragraph = element.data as HwpxParagraph;
+          items.push({
+            type: 'paragraph',
+            element_index: i,
+            text: this.getParagraphPlainText(paragraph),
+            style_id: paragraph.style,
+            run_count: paragraph.runs.length,
+          });
+        } else if (element.type === 'table') {
+          const table = element.data as HwpxTable;
+          const cells = table.rows.map((row, rowIndex) => row.cells.map((cell, colIndex) => {
+            const summary = this.summarizeTableCellContent(cell);
+            if (includeVisualSummary) {
+              this.collectCellVisuals(sectionIndex, i, currentTableIndex!, rowIndex, colIndex, summary.content_tree, visuals);
+            }
+            return summary;
+          }));
+
+          items.push({
+            type: 'table',
+            element_index: i,
+            table_index: currentTableIndex,
+            rows: table.rows.length,
+            cols: table.rows[0]?.cells.length || 0,
+            cells,
+          });
+        } else if (element.type === 'image') {
+          const image = element.data as HwpxImage;
+          const summary = this.summarizeImageData(image);
+          items.push({ ...summary, element_index: i });
+          if (includeVisualSummary) {
+            visuals.push({
+              ...summary,
+              visual_id: `section${sectionIndex}_element${i}_image`,
+              scope: { section_index: sectionIndex, element_index: i },
+            });
+          }
+        } else {
+          const summary = this.summarizeSectionVisualElement(element);
+          items.push({ ...summary, element_index: i });
+          if (includeVisualSummary && summary.requires_visual_read) {
+            visuals.push({
+              ...summary,
+              visual_id: `section${sectionIndex}_element${i}_${element.type}`,
+              scope: { section_index: sectionIndex, element_index: i },
+            });
+          }
+        }
+      }
+
+      if (element.type === 'table') tableIndex++;
+    }
+
+    return {
+      section_index: sectionIndex,
+      start_element_index: start,
+      end_element_index: end,
+      items,
+      visuals,
+    };
+  }
+
   /**
    * Find insertion position by searching for a header/title text
    * Returns position right after the found paragraph (good for inserting content under a header)
@@ -2767,14 +2968,14 @@ export class HwpxDocument {
         }
 
         if (element.type === 'image') {
-          return { type: 'image' as const };
+          return this.summarizeVisualXml(element.data.xml, 'image') as ImageContentTreeNode;
         }
 
         if (element.type === 'container') {
-          return { type: 'container' as const };
+          return this.summarizeVisualXml(element.data.xml, 'container') as ContainerContentTreeNode;
         }
 
-        return { type: 'shape' as const, kind: element.data.kind };
+        return this.summarizeVisualXml(element.data.xml, 'shape', element.data.kind) as ShapeContentTreeNode;
       });
     }
 
@@ -2789,6 +2990,223 @@ export class HwpxDocument {
     }
 
     return nodes;
+  }
+
+  getTableCellVisuals(sectionIndex: number, tableIndex: number, row: number, col: number): {
+    images: ImageContentTreeNode[];
+    shapes: ShapeContentTreeNode[];
+    containers: ContainerContentTreeNode[];
+  } | null {
+    const cell = this.getTableCell(sectionIndex, tableIndex, row, col);
+    if (!cell) return null;
+
+    const images: ImageContentTreeNode[] = [];
+    const shapes: ShapeContentTreeNode[] = [];
+    const containers: ContainerContentTreeNode[] = [];
+
+    for (const node of cell.content_tree) {
+      if (node.type === 'image') images.push(node);
+      if (node.type === 'shape') shapes.push(node);
+      if (node.type === 'container') containers.push(node);
+    }
+
+    return { images, shapes, containers };
+  }
+
+  private collectCellVisuals(
+    sectionIndex: number,
+    elementIndex: number,
+    tableIndex: number,
+    row: number,
+    col: number,
+    contentTree: CellContentTreeNode[],
+    visuals: ContentRangeVisual[]
+  ): void {
+    contentTree.forEach((node, index) => {
+      if (node.type === 'image' && node.requires_visual_read) {
+        visuals.push({
+          ...node,
+          visual_id: `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_image${index}`,
+          scope: { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
+        });
+      } else if (node.type === 'container') {
+        for (const imageRef of node.image_refs) {
+          visuals.push({
+            ...node,
+            type: 'container',
+            binary_id: imageRef,
+            mime_type: this.inferMimeType(imageRef),
+            visual_id: `section${sectionIndex}_element${elementIndex}_table${tableIndex}_cell${row}_${col}_container${index}_${imageRef}`,
+            scope: { section_index: sectionIndex, element_index: elementIndex, table_index: tableIndex, row, col, content_tree_index: index },
+          });
+        }
+      } else if (node.type === 'table') {
+        for (const nestedRow of node.data) {
+          for (const nestedCell of nestedRow) {
+            this.collectCellVisuals(sectionIndex, elementIndex, tableIndex, row, col, nestedCell.content_tree, visuals);
+          }
+        }
+      }
+    });
+  }
+
+  private summarizeVisualXml(xml: string, type: 'image' | 'shape' | 'container', kind?: string): VisualSummary {
+    const texts = this.extractXmlTexts(xml);
+    const imageRefs = this.extractBinaryRefs(xml);
+    const shapeComments = this.extractShapeComments(xml);
+    const shapeCount = this.countShapeStartTags(xml);
+
+    if (type === 'image') {
+      const binaryId = imageRefs[0];
+      return {
+        type: 'image',
+        binary_id: binaryId,
+        mime_type: binaryId ? this.inferMimeType(binaryId) : undefined,
+        requires_visual_read: Boolean(binaryId),
+      };
+    }
+
+    if (type === 'container') {
+      return {
+        type: 'container',
+        container_kind: 'grouped_visual',
+        texts,
+        image_refs: imageRefs,
+        image_count: imageRefs.length,
+        shape_count: shapeCount,
+        ...(shapeComments.length > 0 ? { shape_comments: shapeComments } : {}),
+        requires_visual_read: imageRefs.length > 0,
+      };
+    }
+
+    return {
+      type: 'shape',
+      kind: kind || 'shape',
+      ...(texts.length > 0 ? { texts, text: texts.join('\n') } : {}),
+      requires_visual_read: imageRefs.length > 0,
+    };
+  }
+
+  private summarizeImageData(image: HwpxImage): ImageContentTreeNode {
+    return {
+      type: 'image',
+      binary_id: image.binaryId,
+      mime_type: image.mimeType || this.inferMimeType(image.binaryId),
+      width: image.width,
+      height: image.height,
+      requires_visual_read: true,
+    };
+  }
+
+  private summarizeSectionVisualElement(element: SectionElement): VisualSummary {
+    if (element.type === 'container') {
+      const container = element.data as any;
+      const imageRefs: string[] = [];
+      let shapeCount = 0;
+      const shapeComments: string[] = [];
+
+      const visit = (node: any): void => {
+        if (!node) return;
+        if (node.binaryId) imageRefs.push(node.binaryId);
+        if (node.shapeObject?.shapeComment) shapeComments.push(node.shapeObject.shapeComment);
+        if (node.children) {
+          for (const child of node.children) visit(child);
+        } else if (!node.binaryId) {
+          shapeCount++;
+        }
+      };
+
+      for (const child of container.children || []) visit(child);
+      return {
+        type: 'container',
+        container_kind: 'grouped_visual',
+        texts: [],
+        image_refs: [...new Set(imageRefs)],
+        image_count: [...new Set(imageRefs)].length,
+        shape_count: shapeCount,
+        ...(shapeComments.length > 0 ? { shape_comments: [...new Set(shapeComments)] } : {}),
+        requires_visual_read: imageRefs.length > 0,
+      };
+    }
+
+    return {
+      type: 'shape',
+      kind: element.type,
+      requires_visual_read: false,
+    };
+  }
+
+  private extractXmlTexts(xml: string): string[] {
+    const texts: string[] = [];
+    const textRegex = /<hp:t\b[^>]*>([\s\S]*?)<\/hp:t>/g;
+    let match;
+    while ((match = textRegex.exec(xml)) !== null) {
+      const text = this.decodeXmlText(match[1]).trim();
+      if (text) texts.push(text);
+    }
+    return [...new Set(texts)];
+  }
+
+  private extractBinaryRefs(xml: string): string[] {
+    const refs: string[] = [];
+    const refRegex = /binaryItemIDRef="([^"]+)"/g;
+    let match;
+    while ((match = refRegex.exec(xml)) !== null) refs.push(match[1]);
+    return [...new Set(refs)];
+  }
+
+  private extractShapeComments(xml: string): string[] {
+    const comments: string[] = [];
+    const commentRegex = /<hp:shapeComment\b[^>]*>([\s\S]*?)<\/hp:shapeComment>/g;
+    let match;
+    while ((match = commentRegex.exec(xml)) !== null) {
+      const comment = this.decodeXmlText(match[1]).trim();
+      if (comment) comments.push(comment);
+    }
+    return [...new Set(comments)];
+  }
+
+  private countShapeStartTags(xml: string): number {
+    const shapeTags = ['line', 'rect', 'ellipse', 'arc', 'polygon', 'curve', 'connectLine', 'chart'];
+    return shapeTags.reduce((count, tag) => count + (xml.match(new RegExp(`<hp:${tag}\\b`, 'g')) || []).length, 0);
+  }
+
+  private decodeXmlText(text: string): string {
+    return text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  private inferSiblingHeadingPattern(headingText: string): string | null {
+    if (!/\d/.test(headingText)) return null;
+    return headingText
+      .trim()
+      .split(/\s+/)
+      .map(part => {
+        if (/^\d+$/.test(part)) return '\\d+';
+        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      })
+      .join('\\s+');
+  }
+
+  private inferMimeType(binaryId?: string): string | undefined {
+    if (!binaryId) return undefined;
+    const image = this._content.images.get(binaryId);
+    if (image?.mimeType) return image.mimeType;
+
+    const binData = this._content.binItems.get(binaryId);
+    if (binData?.format) return this.mimeTypeFromExtension(binData.format);
+
+    if (this._zip) {
+      const fileName = Object.keys(this._zip.files)
+        .find(file => file.startsWith('BinData/') && file.replace(/^BinData\//, '').replace(/\.[^.]+$/, '') === binaryId);
+      if (fileName) return this.mimeTypeFromExtension(fileName.split('.').pop());
+    }
+
+    return undefined;
   }
 
   private buildTableContentTreeNode(table: HwpxTable): CellContentTreeNode {
@@ -3546,6 +3964,96 @@ export class HwpxDocument {
       width: img.width,
       height: img.height,
     }));
+  }
+
+  async getVisualAsset(binaryId: string): Promise<VisualAsset | null> {
+    if (!this._zip) return null;
+
+    const manifestMatch = await this.findManifestItem(binaryId);
+    const manifestPath = manifestMatch?.filename;
+    const candidatePaths = [
+      manifestPath,
+      `BinData/${binaryId}`,
+      ...Object.keys(this._zip.files).filter(file => {
+        const normalized = file.replace(/\\/g, '/');
+        const name = normalized.split('/').pop() || '';
+        return normalized.startsWith('BinData/') && name.replace(/\.[^.]+$/, '') === binaryId;
+      }),
+    ].filter((pathName): pathName is string => Boolean(pathName));
+
+    for (const candidate of candidatePaths) {
+      const normalizedCandidate = candidate.replace(/^Contents\//, '').replace(/^\.\//, '');
+      const directFile = this._zip.file(candidate) || this._zip.file(normalizedCandidate);
+      if (!directFile) continue;
+
+      const base64 = await directFile.async('base64');
+      const extension = normalizedCandidate.split('.').pop();
+      return {
+        binary_id: binaryId,
+        mime_type: manifestMatch?.mime_type || this.inferMimeType(binaryId) || this.mimeTypeFromExtension(extension) || 'application/octet-stream',
+        filename: normalizedCandidate,
+        base64,
+      };
+    }
+
+    const binData = this._content.binData.get(binaryId);
+    if (binData?.data) {
+      return {
+        binary_id: binaryId,
+        mime_type: manifestMatch?.mime_type || this.inferMimeType(binaryId) || 'application/octet-stream',
+        filename: manifestPath || `BinData/${binaryId}`,
+        base64: binData.data,
+      };
+    }
+
+    return null;
+  }
+
+  private async findManifestItem(binaryId: string): Promise<{ filename: string; mime_type?: string } | null> {
+    if (!this._zip) return null;
+    const hpf = await this._zip.file('Contents/content.hpf')?.async('string');
+    if (!hpf) return null;
+
+    const itemRegex = /<[^>]*item\b[^>]*>/g;
+    let match;
+    while ((match = itemRegex.exec(hpf)) !== null) {
+      const tag = match[0];
+      const attrs = this.parseXmlAttributes(tag);
+      if (attrs.id !== binaryId) continue;
+
+      const href = attrs.href;
+      if (!href) return null;
+      return {
+        filename: href.replace(/\\/g, '/').replace(/^\/+/, ''),
+        mime_type: attrs['media-type'],
+      };
+    }
+
+    return null;
+  }
+
+  private parseXmlAttributes(tag: string): Record<string, string> {
+    const attrs: Record<string, string> = {};
+    const attrRegex = /([:\w-]+)="([^"]*)"/g;
+    let match;
+    while ((match = attrRegex.exec(tag)) !== null) attrs[match[1]] = match[2];
+    return attrs;
+  }
+
+  private mimeTypeFromExtension(extension?: string): string | undefined {
+    if (!extension) return undefined;
+    const normalized = extension.toLowerCase().replace(/^\./, '');
+    const map: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      bmp: 'image/bmp',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      ole: 'application/octet-stream',
+    };
+    return map[normalized];
   }
 
   // ============================================================

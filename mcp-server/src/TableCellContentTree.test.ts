@@ -20,7 +20,8 @@ async function createNestedTableDocument(): Promise<Buffer> {
 </hh:head>`);
   zip.file('Contents/section0.xml', `<?xml version="1.0" encoding="UTF-8"?>
 <hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
-        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"
+        xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core">
   <hp:p id="heading"><hp:run><hp:t>PPT 6 page</hp:t></hp:run></hp:p>
   <hp:tbl id="outer" rowCnt="1" colCnt="1">
     <hp:tr>
@@ -91,7 +92,8 @@ async function createTableWithCellVisualObjectDocument(): Promise<Buffer> {
 
   zip.file('mimetype', 'application/hwp+zip');
   zip.file('version.xml', '<?xml version="1.0"?><hwpml version="1.0"/>');
-  zip.file('Contents/content.hpf', '<?xml version="1.0"?><pkg:package xmlns:pkg="http://www.hancom.co.kr/hwpml/2011/package"><pkg:manifest><pkg:item id="section0" href="section0.xml"/></pkg:manifest></pkg:package>');
+  zip.file('Contents/content.hpf', '<?xml version="1.0"?><pkg:package xmlns:pkg="http://www.hancom.co.kr/hwpml/2011/package"><pkg:manifest><pkg:item id="section0" href="section0.xml"/><pkg:item id="image2" href="BinData/image2.png" media-type="image/png"/></pkg:manifest></pkg:package>');
+  zip.file('BinData/image2.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64'));
   zip.file('Contents/header.xml', `<?xml version="1.0" encoding="UTF-8"?>
 <hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
   <hh:docInfo><hh:title>Cell Visual Object Test</hh:title></hh:docInfo>
@@ -116,7 +118,10 @@ async function createTableWithCellVisualObjectDocument(): Promise<Buffer> {
       <hp:tc colAddr="1" rowAddr="0">
         <hp:subList>
           <hp:container id="chart_group">
-            <hp:rect id="chart_box"/>
+            <hp:rect id="chart_box">
+              <hp:drawText><hp:p id="phase_label"><hp:run><hp:t>잠복기</hp:t></hp:run></hp:p></hp:drawText>
+            </hp:rect>
+            <hp:pic id="chart_image"><hc:img binaryItemIDRef="image2"/></hp:pic>
           </hp:container>
         </hp:subList>
       </hp:tc>
@@ -243,12 +248,63 @@ describe('Table cell content tree', () => {
     const context = doc.getInsertContext(0, 1, 3);
 
     expect(table?.data[0][1].text).toBe('');
-    expect(table?.data[0][1].content_tree).toEqual([{ type: 'container' }]);
+    expect(table?.data[0][1].content_tree[0]).toMatchObject({
+      type: 'container',
+      container_kind: 'grouped_visual',
+      texts: ['잠복기'],
+      image_refs: ['image2'],
+      image_count: 1,
+      shape_count: 1,
+      requires_visual_read: true,
+    });
     expect(context?.elements_after[0]).toMatchObject({
       type: 'paragraph',
       text: 'After table paragraph',
       element_index: 2,
     });
     expect(context?.elements_after.some(element => element.type === 'container' || element.type === 'rect')).toBe(false);
+  });
+
+  it('reads a heading range with table cell visual affordances and image payload lookup', async () => {
+    const buffer = await createTableWithCellVisualObjectDocument();
+    const doc = await HwpxDocument.createFromBuffer('range-visual-test', 'range-visual-test.hwpx', buffer);
+
+    const range = doc.findContentRangeAfterHeading('PPT 3 page', {
+      untilNextHeading: true,
+      headingPattern: 'PPT \\d+ page',
+    });
+    expect(range).toMatchObject({
+      section_index: 0,
+      start_element_index: 0,
+      end_element_index: 2,
+      end_reason: 'section_end',
+    });
+
+    const content = doc.getContentRange(0, range!.start_element_index, range!.end_element_index);
+    expect(content?.items[1]).toMatchObject({
+      type: 'table',
+      table_index: 0,
+      rows: 1,
+      cols: 2,
+    });
+    expect(content?.items[1].cells[0][1].content_tree[0]).toMatchObject({
+      type: 'container',
+      texts: ['잠복기'],
+      image_refs: ['image2'],
+      requires_visual_read: true,
+    });
+    expect(content?.visuals[0]).toMatchObject({
+      type: 'container',
+      binary_id: 'image2',
+      scope: { section_index: 0, element_index: 1, table_index: 0, row: 0, col: 1 },
+    });
+
+    const asset = await doc.getVisualAsset('image2');
+    expect(asset).toMatchObject({
+      binary_id: 'image2',
+      mime_type: 'image/png',
+      filename: 'BinData/image2.png',
+    });
+    expect(asset?.base64.length).toBeGreaterThan(20);
   });
 });

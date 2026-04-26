@@ -1,6 +1,6 @@
 # MCP 도구 한국어 요약
 
-`mcp-server/src/index.ts` 기준 MCP 도구 130개의 간단 요약입니다. HWPX 편집 도구가 주 대상이며, HWP 파일은 편집/저장을 지원하지 않습니다.
+`mcp-server/src/index.ts` 기준 MCP 도구 134개의 간단 요약입니다. HWPX 편집 도구가 주 대상이며, HWP 파일은 편집/저장을 지원하지 않습니다.
 
 ## 사용 가이드
 
@@ -98,6 +98,7 @@
 | `get_element_index_for_table` | 전역 표 인덱스를 섹션 내 요소 인덱스로 변환합니다. |
 | `get_table` | 특정 표의 전체 데이터를 조회하며, 각 셀의 `content_tree`로 중첩 표/문단 구조도 확인할 수 있습니다. |
 | `get_table_cell` | 특정 표 셀 내용을 조회하며, `content_tree`, `has_nested_tables`, `nested_table_count`를 함께 반환합니다. |
+| `get_table_cell_visuals` | 특정 표 셀 안의 이미지, 도형, 묶음 객체 요약과 이미지 참조를 조회합니다. |
 | `get_table_as_csv` | 표 내용을 CSV 문자열로 내보냅니다. |
 | `find_cell_by_label` | 라벨 텍스트를 가진 셀과 인접 입력 셀 위치를 찾습니다. |
 | `get_cell_context` | 특정 셀 주변의 위/아래/좌/우 셀 내용을 조회합니다. |
@@ -128,6 +129,8 @@
 | 도구 | 요약 |
 |---|---|
 | `get_insert_context` | 특정 요소 인덱스 앞뒤 내용을 보여줘 삽입 위치를 검증합니다. |
+| `find_content_range_after_heading` | 특정 헤더부터 다음 헤더 전까지의 읽기 범위를 찾습니다. |
+| `get_content_range` | 지정한 요소 범위의 문단, 표, 셀, 시각 자료 요약을 순서대로 읽습니다. |
 | `find_insert_position_after_header` | 특정 텍스트 뒤의 삽입 위치를 찾고, 표 셀 내부인지도 알려줍니다. |
 | `find_insert_position_after_table` | 특정 표 뒤, 표 바깥에 삽입할 위치를 찾습니다. |
 
@@ -168,6 +171,7 @@
 | 도구 | 요약 |
 |---|---|
 | `get_images` | 문서의 이미지 목록을 조회합니다. |
+| `get_visual_asset` | 이미지 binary id로 실제 이미지 payload와 메타데이터를 반환합니다. |
 | `insert_image` | 이미지를 표 바깥의 독립 요소로 삽입합니다. |
 | `update_image_size` | 기존 이미지 크기를 변경합니다. |
 | `delete_image` | 문서에서 이미지를 삭제합니다. |

@@ -775,6 +775,36 @@ Alternative tools:
     },
   },
   {
+    name: 'find_content_range_after_heading',
+    description: 'Find an element range starting at a heading paragraph and ending before the next matching heading. Useful for reading all content under markers like "PPT 3 page".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        heading_text: { type: 'string', description: 'Heading text to search for' },
+        section_index: { type: 'number', description: 'Optional section index to limit search' },
+        until_next_heading: { type: 'boolean', description: 'Stop before the next heading (default: true)' },
+        heading_pattern: { type: 'string', description: 'Regex for the next heading, e.g. "PPT \\\\d+ page"' },
+      },
+      required: ['doc_id', 'heading_text'],
+    },
+  },
+  {
+    name: 'get_content_range',
+    description: 'Read every element in a section range in order, including paragraphs, tables, nested cell content, and lightweight visual summaries.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        section_index: { type: 'number', description: 'Section index' },
+        start_element_index: { type: 'number', description: 'First element index to read' },
+        end_element_index: { type: 'number', description: 'Last element index to read' },
+        include_visual_summary: { type: 'boolean', description: 'Include visual affordances and image references (default: true)' },
+      },
+      required: ['doc_id', 'section_index', 'start_element_index', 'end_element_index'],
+    },
+  },
+  {
     name: 'find_insert_position_after_header',
     description: `Find the right insertion position after text. Searches both independent paragraphs AND table cell contents by default.
 
@@ -826,6 +856,21 @@ NOTE: This inserts AFTER the table, not inside it. To insert an image INSIDE a t
   {
     name: 'get_table_cell',
     description: 'Get content of a specific table cell, including plain text, content_tree, and nested table metadata',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        section_index: { type: 'number', description: 'Section index' },
+        table_index: { type: 'number', description: 'Table index' },
+        row: { type: 'number', description: 'Row index (0-based)' },
+        col: { type: 'number', description: 'Column index (0-based)' },
+      },
+      required: ['doc_id', 'section_index', 'table_index', 'row', 'col'],
+    },
+  },
+  {
+    name: 'get_table_cell_visuals',
+    description: 'Get lightweight visual summaries for one table cell, including containers, shape text, and referenced image ids. Does not return image payloads.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1235,6 +1280,18 @@ batch_fill_table({
         doc_id: { type: 'string', description: 'Document ID' },
       },
       required: ['doc_id'],
+    },
+  },
+  {
+    name: 'get_visual_asset',
+    description: 'Return an image asset by binary id as MCP image content plus metadata. Call only after a visual summary indicates the image is relevant.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        binary_id: { type: 'string', description: 'Image binary id, e.g. image2' },
+      },
+      required: ['doc_id', 'binary_id'],
     },
   },
 
@@ -2343,6 +2400,8 @@ The image will appear AFTER the table, not inside the cell!`,
 - get_paragraphs - Get all paragraphs with details
 - get_table_map - Get all tables with headers
 - get_table - Get specific table data
+- find_content_range_after_heading + get_content_range - Read all content under a heading/page marker
+- get_visual_asset - Fetch image payload only when a visual summary is relevant
 
 ⭐ LARGE DOCUMENT ANALYSIS (Agentic):
 - chunk_document - Split into chunks for analysis
@@ -3141,6 +3200,36 @@ Call get_tool_guide with: template, table, image, search, read, create`
         return success(result);
       }
 
+      case 'find_content_range_after_heading': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        const headingText = args?.heading_text as string;
+        if (!headingText) return error('heading_text is required');
+        const result = doc.findContentRangeAfterHeading(headingText, {
+          sectionIndex: args?.section_index as number | undefined,
+          untilNextHeading: args?.until_next_heading as boolean | undefined,
+          headingPattern: args?.heading_pattern as string | undefined,
+        });
+        if (!result) return error(`Heading "${headingText}" not found`);
+        return success(result);
+      }
+
+      case 'get_content_range': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        const sectionIndex = args?.section_index as number;
+        const startElementIndex = args?.start_element_index as number;
+        const endElementIndex = args?.end_element_index as number;
+        if (typeof sectionIndex !== 'number') return error('section_index is required');
+        if (typeof startElementIndex !== 'number') return error('start_element_index is required');
+        if (typeof endElementIndex !== 'number') return error('end_element_index is required');
+        const result = doc.getContentRange(sectionIndex, startElementIndex, endElementIndex, {
+          includeVisualSummary: args?.include_visual_summary as boolean | undefined,
+        });
+        if (!result) return error('Invalid content range');
+        return success(result);
+      }
+
       case 'find_insert_position_after_header': {
         const doc = getDoc(args?.doc_id as string);
         if (!doc) return error('Document not found');
@@ -3191,6 +3280,19 @@ Call get_tool_guide with: template, table, image, search, read, create`
         );
         if (!cell) return error('Cell not found');
         return success(cell);
+      }
+
+      case 'get_table_cell_visuals': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        const visuals = doc.getTableCellVisuals(
+          args?.section_index as number,
+          args?.table_index as number,
+          args?.row as number,
+          args?.col as number
+        );
+        if (!visuals) return error('Cell not found');
+        return success(visuals);
       }
 
       case 'update_table_cell': {
@@ -3594,6 +3696,33 @@ Call get_tool_guide with: template, table, image, search, read, create`
         const doc = getDoc(args?.doc_id as string);
         if (!doc) return error('Document not found');
         return success({ images: doc.getImages() });
+      }
+
+      case 'get_visual_asset': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        const binaryId = args?.binary_id as string;
+        if (!binaryId) return error('binary_id is required');
+        const asset = await doc.getVisualAsset(binaryId);
+        if (!asset) return error(`Visual asset "${binaryId}" not found`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                binary_id: asset.binary_id,
+                mime_type: asset.mime_type,
+                filename: asset.filename,
+                base64_length: asset.base64.length,
+              }, null, 2),
+            },
+            {
+              type: 'image',
+              data: asset.base64,
+              mimeType: asset.mime_type,
+            },
+          ],
+        };
       }
 
       // === Export ===
