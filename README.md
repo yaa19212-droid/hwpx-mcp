@@ -519,6 +519,16 @@ MIT
 
 ---
 
+## 📚 Repository Notes
+
+- `docs/hwpml-format-reference.md`: HWPML/HWPX 포맷 참고 문서
+- `docs/design-notes/`: 구현 완료된 설계 메모
+- `docs/bug-notes/`: 보존 가치가 있는 버그 분석 기록
+- `openspec/changes/`: 진행 중인 OpenSpec 변경 제안
+- `openspec/changes/archive/`: 완료된 OpenSpec 변경 기록
+
+---
+
 ## 🤝 Contributing
 
 버그 리포트 및 기능 요청: [GitHub Issues](https://github.com/Dayoooun/hwpx-mcp/issues)

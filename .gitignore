@@ -19,8 +19,14 @@ mcp-server/node_modules/
 
 # Test files
 *.hwpx
+*.hwpx.bak
 *.hwp
 test_*.hwpx
+
+# Local debug output
+mcp-server/debug-*.txt
+mcp-server/debug-*.log
+mcp-server/debug-*.md
 
 # IDE/Editor
 .mcp.json
@@ -33,6 +39,9 @@ Thumbs.db
 # Claude Code
 .claude/
 .chat-history.md
+
+# Local agent/session state
+.omc/
 
 # pnpm
 pnpm-lock.yaml

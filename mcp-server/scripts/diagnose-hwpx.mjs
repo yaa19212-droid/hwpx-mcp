@@ -2,7 +2,7 @@
 /**
  * HWPX 문서 진단 도구
  *
- * 사용법: node diagnose-hwpx.mjs <hwpx파일경로> [section_index]
+ * 사용법: node scripts/diagnose-hwpx.mjs <hwpx파일경로> [section_index]
  *
  * 이 도구는:
  * 1. HWPX 파일의 XML 구조를 분석
@@ -10,7 +10,7 @@
  * 3. 잠재적 문제점 식별
  */
 
-import { HwpxDocument } from './dist/HwpxDocument.js';
+import { HwpxDocument } from '../dist/HwpxDocument.js';
 import JSZip from 'jszip';
 import * as fs from 'fs';
 
@@ -168,11 +168,11 @@ async function diagnose(filePath, sectionIdx = 0) {
 // 실행
 const args = process.argv.slice(2);
 if (args.length < 1) {
-  console.log('사용법: node diagnose-hwpx.mjs <hwpx파일경로> [section_index]');
+  console.log('사용법: node scripts/diagnose-hwpx.mjs <hwpx파일경로> [section_index]');
   console.log('');
   console.log('예시:');
-  console.log('  node diagnose-hwpx.mjs "C:\\Users\\문서.hwpx"');
-  console.log('  node diagnose-hwpx.mjs "C:\\Users\\문서.hwpx" 0');
+  console.log('  node scripts/diagnose-hwpx.mjs "C:\\Users\\문서.hwpx"');
+  console.log('  node scripts/diagnose-hwpx.mjs "C:\\Users\\문서.hwpx" 0');
   process.exit(1);
 }
 

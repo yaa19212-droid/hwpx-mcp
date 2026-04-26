@@ -1,7 +1,7 @@
 /**
  * 중첩 테이블 삭제 테스트
  */
-import { HwpxDocument } from './dist/HwpxDocument.js';
+import { HwpxDocument } from '../dist/HwpxDocument.js';
 import JSZip from 'jszip';
 import * as fs from 'fs';
 import * as path from 'path';

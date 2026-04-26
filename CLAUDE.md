@@ -70,6 +70,8 @@ The server exposes MCP tools for document management, text edits, table edits, s
 
 - HWPX files are ZIP archives containing HWPML XML files.
 - HWPML uses `hwpunit`, where 1 point = 100 hwpunit.
+- Format reference: `docs/hwpml-format-reference.md`.
+- Design and bug notes live under `docs/design-notes/` and `docs/bug-notes/`.
 - Save behavior should preserve original XML/style data where possible and avoid corrupting files.
 
 ## Compatibility Notes

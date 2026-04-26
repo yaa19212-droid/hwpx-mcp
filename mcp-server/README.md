@@ -286,6 +286,18 @@ node test-mcp-e2e.mjs       # 16개 기본 E2E 테스트
 node test-new-persistence-e2e.mjs  # 8개 persistence E2E 테스트
 ```
 
+## 수동 진단 유틸리티
+
+```bash
+cd mcp-server
+npm run build
+npm run diagnose -- "C:/path/to/document.hwpx" 0
+npm run test:nested-manual
+```
+
+- `diagnose`: HWPX section XML, 문단/run 구조, 반복 텍스트 의심 지점을 출력합니다.
+- `test:nested-manual`: 중첩 테이블 삭제 재현용 수동 스크립트입니다. 일반 검증은 `npm test`를 우선 사용하세요.
+
 ## 알려진 제한사항
 
 - **각주/미주/북마크/하이퍼링크 삽입**: 메모리에서만 동작, save 후 XML 미반영 (읽기는 정상)
