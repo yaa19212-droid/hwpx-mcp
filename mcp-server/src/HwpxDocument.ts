@@ -33,6 +33,15 @@ type DocumentFormat = 'hwpx' | 'hwp';
 
 const MAX_UNDO_STACK_SIZE = 50;
 
+function escapeXmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 // Image positioning options
 export interface ImagePositionOptions {
   /** Position type: 'inline' (flows with text like a character) or 'floating' (positioned relative to anchor) */
@@ -338,6 +347,8 @@ export class HwpxDocument {
 
   public static createNew(id: string, title?: string, creator?: string): HwpxDocument {
     const now = new Date().toISOString();
+    const safeTitle = escapeXmlText(title || 'Untitled');
+    const safeCreator = escapeXmlText(creator || 'Unknown');
     const content: HwpxContent = {
       metadata: {
         title: title || 'Untitled',
@@ -389,7 +400,7 @@ export class HwpxDocument {
     zip.file('settings.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><ha:HWPApplicationSetting xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"><ha:CaretPosition listIDRef="0" paraIDRef="0" pos="0"/></ha:HWPApplicationSetting>`);
 
     // Contents/content.hpf - package manifest with all namespaces
-    zip.file('Contents/content.hpf', `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><opf:package xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" version="" unique-identifier="" id=""><opf:metadata><opf:title>${title || 'Untitled'}</opf:title><opf:language>ko</opf:language><opf:meta name="creator" content="text">${creator || 'Unknown'}</opf:meta><opf:meta name="CreatedDate" content="text">${now}</opf:meta><opf:meta name="ModifiedDate" content="text">${now}</opf:meta></opf:metadata><opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/><opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/><opf:item id="settings" href="settings.xml" media-type="application/xml"/></opf:manifest><opf:spine><opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/></opf:spine></opf:package>`);
+    zip.file('Contents/content.hpf', `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><opf:package xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" version="" unique-identifier="" id=""><opf:metadata><opf:title>${safeTitle}</opf:title><opf:language>ko</opf:language><opf:meta name="creator" content="text">${safeCreator}</opf:meta><opf:meta name="CreatedDate" content="text">${now}</opf:meta><opf:meta name="ModifiedDate" content="text">${now}</opf:meta></opf:metadata><opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/><opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/><opf:item id="settings" href="settings.xml" media-type="application/xml"/></opf:manifest><opf:spine><opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/></opf:spine></opf:package>`);
 
     // Contents/header.xml with all namespaces
     zip.file('Contents/header.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><hh:head xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" xmlns:hp10="http://www.hancom.co.kr/hwpml/2016/paragraph" xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hc="http://www.hancom.co.kr/hwpml/2011/core" xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" xmlns:hhs="http://www.hancom.co.kr/hwpml/2011/history" xmlns:hm="http://www.hancom.co.kr/hwpml/2011/master-page" xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf/" xmlns:ooxmlchart="http://www.hancom.co.kr/hwpml/2016/ooxmlchart" xmlns:hwpunitchar="http://www.hancom.co.kr/hwpml/2016/HwpUnitChar" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" version="1.1" secCnt="1">
@@ -653,8 +664,17 @@ export class HwpxDocument {
     const paragraph = this.findParagraphByPath(sectionIndex, elementIndex);
     if (!paragraph) return;
 
-    // Auto-delegate to preserve styles method for multi-run paragraphs
-    if (paragraph.runs.length > 1) {
+    const runStyleSignature = (run: TextRun) => JSON.stringify({
+      charStyle: run.charStyle || null,
+      hyperlink: run.hyperlink || null,
+      field: run.field || null,
+    });
+    const hasSingleRunStyle = paragraph.runs.length > 0 &&
+      paragraph.runs.every(run => runStyleSignature(run) === runStyleSignature(paragraph.runs[0]));
+
+    // Auto-delegate styled multi-run paragraphs, but treat same-style text
+    // fragments as one logical run so full replacement clears the leftovers.
+    if (paragraph.runs.length > 1 && !hasSingleRunStyle) {
       this.updateParagraphTextPreserveStyles(sectionIndex, elementIndex, text);
       return;
     }
@@ -6772,6 +6792,66 @@ export class HwpxDocument {
     return elements;
   }
 
+  private setXmlAttribute(tagXml: string, attrName: string, value: number | string): string {
+    const attrRegex = new RegExp(`${attrName}="[^"]*"`);
+    if (attrRegex.test(tagXml)) {
+      return tagXml.replace(attrRegex, `${attrName}="${value}"`);
+    }
+    return tagXml.replace(/\/?>$/, ` ${attrName}="${value}"$&`);
+  }
+
+  private updateFirstElementTagAttributes(xml: string, elementName: string, attrs: Record<string, number | string>): string {
+    const tagRegex = new RegExp(`<(?:hp|hs|hc):${elementName}\\b[^>]*>`);
+    return xml.replace(tagRegex, (tag) => {
+      let updated = tag;
+      for (const [name, value] of Object.entries(attrs)) {
+        updated = this.setXmlAttribute(updated, name, value);
+      }
+      return updated;
+    });
+  }
+
+  private updateFirstCellAddrAttributes(xml: string, attrs: Record<string, number | string>): string {
+    return xml.replace(/<(?:hp|hs|hc):cellAddr\b[^>]*\/?>/, (tag) => {
+      let updated = tag;
+      for (const [name, value] of Object.entries(attrs)) {
+        updated = this.setXmlAttribute(updated, name, value);
+      }
+      return updated;
+    });
+  }
+
+  private updateCellAddressXml(cellXml: string, attrs: { rowAddr?: number; colAddr?: number }): string {
+    const attrEntries: Record<string, number> = {};
+    if (attrs.rowAddr !== undefined) attrEntries.rowAddr = attrs.rowAddr;
+    if (attrs.colAddr !== undefined) attrEntries.colAddr = attrs.colAddr;
+
+    let updated = this.updateFirstElementTagAttributes(cellXml, 'tc', attrEntries);
+    updated = this.updateFirstCellAddrAttributes(updated, attrEntries);
+    return updated;
+  }
+
+  private renumberTableRowAddresses(tableXml: string): string {
+    let updatedTableXml = tableXml;
+    const rows = this.findAllElementsWithDepth(tableXml, 'tr');
+
+    for (let r = rows.length - 1; r >= 0; r--) {
+      const row = rows[r];
+      let updatedRowXml = row.xml;
+      const cells = this.findAllElementsWithDepth(row.xml, 'tc');
+
+      for (let c = cells.length - 1; c >= 0; c--) {
+        const cell = cells[c];
+        const updatedCellXml = this.updateCellAddressXml(cell.xml, { rowAddr: r });
+        updatedRowXml = updatedRowXml.substring(0, cell.startIndex) + updatedCellXml + updatedRowXml.substring(cell.endIndex);
+      }
+
+      updatedTableXml = updatedTableXml.substring(0, row.startIndex) + updatedRowXml + updatedTableXml.substring(row.endIndex);
+    }
+
+    return updatedTableXml;
+  }
+
   /**
    * Update specific cells in a table XML string.
    * Groups updates by row to avoid index corruption when multiple cells in the same row are updated.
@@ -8443,75 +8523,47 @@ export class HwpxDocument {
       updateMap.set(update.runIndex, update.newText);
     }
 
-    // Find all hp:run elements with their positions
-    // Use non-greedy matching and track depth for nested elements
-    const runs: Array<{ start: number; end: number; xml: string }> = [];
-    const runOpenRegex = /<hp:run\b[^>]*>/g;
+    const textTags: Array<{ start: number; end: number; xml: string; selfClosing: boolean }> = [];
+    const textTagRegex = /<hp:t\b[^>]*\/>|<hp:t\b[^>]*>[\s\S]*?<\/hp:t>/g;
     let match;
-
-    while ((match = runOpenRegex.exec(paragraphXml)) !== null) {
-      const runStart = match.index;
-      let depth = 1;
-      let pos = runStart + match[0].length;
-
-      // Find matching </hp:run> using depth tracking
-      while (depth > 0 && pos < paragraphXml.length) {
-        const nextOpen = paragraphXml.indexOf('<hp:run', pos);
-        const nextClose = paragraphXml.indexOf('</hp:run>', pos);
-
-        if (nextClose === -1) break;
-
-        if (nextOpen !== -1 && nextOpen < nextClose) {
-          depth++;
-          pos = nextOpen + 7;
-        } else {
-          depth--;
-          if (depth === 0) {
-            const runEnd = nextClose + '</hp:run>'.length;
-            runs.push({
-              start: runStart,
-              end: runEnd,
-              xml: paragraphXml.slice(runStart, runEnd)
-            });
-          }
-          pos = nextClose + 9;
-        }
-      }
+    while ((match = textTagRegex.exec(paragraphXml)) !== null) {
+      textTags.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        xml: match[0],
+        selfClosing: /\/>$/.test(match[0]),
+      });
     }
 
-    // Filter to only runs that have <hp:t> content (matching memory model behavior)
-    // Memory model only counts runs with text, not runs with only <hp:ctrl> etc.
-    const textRuns = runs.filter(run => /<hp:t\b/.test(run.xml) || /<hp:t\s*\/>/.test(run.xml));
-
-    // Process text runs in reverse order to maintain positions
-    for (let i = textRuns.length - 1; i >= 0; i--) {
+    // The parser exposes each hp:t as a TextRun, even when several hp:t tags
+    // live inside one hp:run. Update the same unit the parser counted.
+    for (let i = textTags.length - 1; i >= 0; i--) {
       if (!updateMap.has(i)) continue;
 
-      const run = textRuns[i];
+      const textTag = textTags[i];
       const newText = updateMap.get(i)!;
       const escapedNew = this.escapeXml(newText);
-      let newRunXml = run.xml;
 
-      // Find and replace hp:t content within this run
-      if (/<hp:t\s*\/>/.test(newRunXml)) {
-        // Self-closing tag: <hp:t/> -> <hp:t>newText</hp:t>
-        newRunXml = newRunXml.replace(/<hp:t\s*\/>/, `<hp:t>${escapedNew}</hp:t>`);
-      } else if (/<hp:t\b[^>]*>/.test(newRunXml)) {
-        // Has content: replace first hp:t content only
-        newRunXml = newRunXml.replace(
-          /(<hp:t\b[^>]*>)[^<]*(<\/hp:t>)/,
-          `$1${escapedNew}$2`
-        );
+      let newTextTagXml: string;
+      if (textTag.selfClosing) {
+        const openTag = textTag.xml.replace(/\/>$/, '>');
+        newTextTagXml = `${openTag}${escapedNew}</hp:t>`;
       } else {
-        // No hp:t tag - add one after the opening hp:run tag
-        newRunXml = newRunXml.replace(
-          /(<hp:run\b[^>]*>)/,
-          `$1<hp:t>${escapedNew}</hp:t>`
+        newTextTagXml = textTag.xml.replace(
+          /(<hp:t\b[^>]*>)[\s\S]*?(<\/hp:t>)/,
+          `$1${escapedNew}$2`
         );
       }
 
-      // Replace in paragraph XML
-      paragraphXml = paragraphXml.slice(0, run.start) + newRunXml + paragraphXml.slice(run.end);
+      paragraphXml = paragraphXml.slice(0, textTag.start) + newTextTagXml + paragraphXml.slice(textTag.end);
+    }
+
+    if (textTags.length === 0 && updateMap.has(0)) {
+      const escapedNew = this.escapeXml(updateMap.get(0)!);
+      paragraphXml = paragraphXml.replace(
+        /(<hp:run\b[^>]*>)/,
+        `$1<hp:t>${escapedNew}</hp:t>`
+      );
     }
 
     return xml.slice(0, target.start) + paragraphXml + xml.slice(target.end);
@@ -11008,6 +11060,10 @@ export class HwpxDocument {
     }
 
     const sectionPath = `Contents/section${sectionIndex}.xml`;
+    if (!this._zip.file(sectionPath)) {
+      return { success: false, message: `Section ${sectionIndex} not found` };
+    }
+
     this._zip.file(sectionPath, xml);
     this.markModified();
 
@@ -12583,16 +12639,21 @@ export class HwpxDocument {
         let newRowXml = templateRow.xml;
 
         // Clear text inside <hp:t> and <hs:t> tags but preserve the tags themselves
-        newRowXml = newRowXml.replace(/<(hp|hs):t([^>]*)>[\s\S]*?<\/\1:t>/g, '<$1:t$2></$1:t>');
+        newRowXml = newRowXml.replace(/<(hp|hs):t\b([^>]*)>[\s\S]*?<\/\1:t>/g, '<$1:t$2></$1:t>');
 
         // Update rowAddr in each cell
         const newRowAddr = insert.afterRowIndex + 1;
-        newRowXml = newRowXml.replace(/rowAddr="(\d+)"/g, `rowAddr="${newRowAddr}"`);
+        const newRowCells = this.findAllElementsWithDepth(newRowXml, 'tc');
+        for (let c = newRowCells.length - 1; c >= 0; c--) {
+          const cell = newRowCells[c];
+          const updatedCellXml = this.updateCellAddressXml(cell.xml, { rowAddr: newRowAddr });
+          newRowXml = newRowXml.substring(0, cell.startIndex) + updatedCellXml + newRowXml.substring(cell.endIndex);
+        }
 
         // Set cell texts if provided
         if (insert.cellTexts) {
           let cellIdx = 0;
-          newRowXml = newRowXml.replace(/<(hp|hs):t([^>]*)><\/\1:t>/g, (match, prefix, attrs) => {
+          newRowXml = newRowXml.replace(/<(hp|hs):t\b([^>]*)><\/\1:t>/g, (match, prefix, attrs) => {
             if (cellIdx < insert.cellTexts!.length) {
               const text = this.escapeXml(insert.cellTexts![cellIdx]);
               cellIdx++;
@@ -12607,8 +12668,10 @@ export class HwpxDocument {
         const insertPos = templateRow.startIndex + templateRow.xml.length;
         const newTableXml = tableXml.substring(0, insertPos) + '\n' + newRowXml + tableXml.substring(insertPos);
 
-        // Update rowCnt attribute
-        const updatedTableXml = newTableXml.replace(/rowCnt="(\d+)"/, (_m, cnt) => `rowCnt="${parseInt(cnt) + 1}"`);
+        // Update rowCnt attribute and keep existing row addresses sequential.
+        const updatedTableXml = this.renumberTableRowAddresses(
+          newTableXml.replace(/rowCnt="(\d+)"/, (_m, cnt) => `rowCnt="${parseInt(cnt) + 1}"`)
+        );
 
         xml = xml.substring(0, tables[insert.tableIndex].startIndex) + updatedTableXml + xml.substring(tables[insert.tableIndex].endIndex);
       }
@@ -12646,8 +12709,10 @@ export class HwpxDocument {
         const row = rows[del.rowIndex];
         const newTableXml = tableXml.substring(0, row.startIndex) + tableXml.substring(row.endIndex);
 
-        // Update rowCnt
-        const updatedTableXml = newTableXml.replace(/rowCnt="(\d+)"/, (_m, cnt) => `rowCnt="${Math.max(0, parseInt(cnt) - 1)}"`);
+        // Update rowCnt and keep remaining row addresses sequential.
+        const updatedTableXml = this.renumberTableRowAddresses(
+          newTableXml.replace(/rowCnt="(\d+)"/, (_m, cnt) => `rowCnt="${Math.max(0, parseInt(cnt) - 1)}"`)
+        );
 
         xml = xml.substring(0, tables[del.tableIndex].startIndex) + updatedTableXml + xml.substring(tables[del.tableIndex].endIndex);
       }
@@ -12704,13 +12769,10 @@ export class HwpxDocument {
 
           // Clone template and clear text
           let newCellXml = templateCell.xml;
-          newCellXml = newCellXml.replace(/<(hp|hs):t([^>]*)>[\s\S]*?<\/\1:t>/g, '<$1:t$2></$1:t>');
+          newCellXml = newCellXml.replace(/<(hp|hs):t\b([^>]*)>[\s\S]*?<\/\1:t>/g, '<$1:t$2></$1:t>');
 
-          // Update colAddr to afterColIndex + 1
-          newCellXml = newCellXml.replace(/colAddr="(\d+)"/, `colAddr="${insert.afterColIndex + 1}"`);
-
-          // Also update <hp:cellAddr colAddr="..."> inside the cell
-          newCellXml = newCellXml.replace(/<(hp|hs):cellAddr([^>]*)colAddr="(\d+)"/, `<$1:cellAddr$2colAddr="${insert.afterColIndex + 1}"`);
+          // Update colAddr in both the tc tag and its cellAddr child.
+          newCellXml = this.updateCellAddressXml(newCellXml, { colAddr: insert.afterColIndex + 1 });
 
           // Shift colAddr of subsequent cells
           let updatedRowXml = row.xml;
@@ -12720,7 +12782,7 @@ export class HwpxDocument {
             if (colAddrMatch) {
               const addr = parseInt(colAddrMatch[1]);
               if (addr > insert.afterColIndex) {
-                const shifted = cell.xml.replace(/colAddr="(\d+)"/, `colAddr="${addr + 1}"`);
+                const shifted = this.updateCellAddressXml(cell.xml, { colAddr: addr + 1 });
                 updatedRowXml = updatedRowXml.substring(0, cell.startIndex) + shifted + updatedRowXml.substring(cell.endIndex);
               }
             }
@@ -12785,7 +12847,7 @@ export class HwpxDocument {
               updatedRowXml = updatedRowXml.substring(0, cell.startIndex) + updatedRowXml.substring(cell.endIndex);
             } else if (addr > del.colIndex) {
               // Shift down
-              const shifted = cell.xml.replace(/colAddr="(\d+)"/, `colAddr="${addr - 1}"`);
+              const shifted = this.updateCellAddressXml(cell.xml, { colAddr: addr - 1 });
               updatedRowXml = updatedRowXml.substring(0, cell.startIndex) + shifted + updatedRowXml.substring(cell.endIndex);
             }
           }

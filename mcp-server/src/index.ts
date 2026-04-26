@@ -2354,11 +2354,12 @@ Call get_tool_guide with: template, table, image, search, read, create`
 
         // Use document lock to ensure all pending updates complete before save
         return await withDocumentLock(docId, async () => {
-          const savePath = (args?.output_path as string) || doc.path;
+          const savePath = path.resolve((args?.output_path as string) || doc.path);
           const createBackup = args?.create_backup !== false; // default: true
           const verifyIntegrity = args?.verify_integrity !== false; // default: true
           let backupPath: string | null = null;
-          const tempPath = savePath + '.tmp';
+          const tempPath = uniqueSiblingPath(savePath, '.tmp');
+          let restorePath: string | null = null;
 
           // Create backup if file exists and backup is enabled
           if (createBackup && fs.existsSync(savePath)) {
@@ -2402,6 +2403,11 @@ Call get_tool_guide with: template, table, image, search, read, create`
                   throw new Error(`Missing required files: ${missingFiles.join(', ')}`);
                 }
 
+                const contentHpf = await zip.file('Contents/content.hpf')?.async('string');
+                if (!contentHpf || contentHpf.match(/<[^>]*$/) || contentHpf.match(/<[^>]*</)) {
+                  throw new Error('Invalid XML in Contents/content.hpf');
+                }
+
                 // Verify all section XML files are valid
                 const sectionFiles = Object.keys(zip.files).filter(f => f.match(/^Contents\/section\d+\.xml$/));
                 for (const sectionFile of sectionFiles) {
@@ -2434,11 +2440,22 @@ Call get_tool_guide with: template, table, image, search, read, create`
               }
             }
 
-            // Phase 2: Atomic move - rename temp to final (atomic on same filesystem)
+            // Phase 2: replace final while keeping an internal restore copy until success.
             if (fs.existsSync(savePath)) {
-              fs.unlinkSync(savePath);
+              restorePath = uniqueSiblingPath(savePath, '.restore');
+              fs.renameSync(savePath, restorePath);
             }
-            fs.renameSync(tempPath, savePath);
+            try {
+              fs.renameSync(tempPath, savePath);
+              if (restorePath && fs.existsSync(restorePath)) {
+                fs.unlinkSync(restorePath);
+              }
+            } catch (renameErr) {
+              if (restorePath && fs.existsSync(restorePath) && !fs.existsSync(savePath)) {
+                fs.renameSync(restorePath, savePath);
+              }
+              throw renameErr;
+            }
 
             return success({
               message: `Saved to ${savePath}`,
@@ -2449,6 +2466,9 @@ Call get_tool_guide with: template, table, image, search, read, create`
             // Clean up temp file if exists
             if (fs.existsSync(tempPath)) {
               try { fs.unlinkSync(tempPath); } catch {}
+            }
+            if (restorePath && fs.existsSync(restorePath) && !fs.existsSync(savePath)) {
+              try { fs.renameSync(restorePath, savePath); } catch {}
             }
             // Restore from backup if save fails
             if (backupPath && fs.existsSync(backupPath)) {
@@ -4391,11 +4411,10 @@ Call get_tool_guide with: template, table, image, search, read, create`
             message: result.message,
           });
         } else {
-          return success({
-            success: false,
+          return error(JSON.stringify({
             message: result.message,
             issues: result.issues,
-          });
+          }));
         }
       }
 
@@ -4621,7 +4640,21 @@ function success(data: any) {
 }
 
 function error(message: string) {
-  return { content: [{ type: 'text', text: JSON.stringify({ error: message }) }] };
+  return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: message }) }] };
+}
+
+function uniqueSiblingPath(targetPath: string, suffix: string): string {
+  const dir = path.dirname(targetPath);
+  const ext = path.extname(targetPath);
+  const base = path.basename(targetPath, ext);
+
+  for (let i = 0; i < 100; i++) {
+    const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${i ? `-${i}` : ''}`;
+    const candidate = path.join(dir, `${base}.${nonce}${suffix}${ext}`);
+    if (!fs.existsSync(candidate)) return candidate;
+  }
+
+  throw new Error(`Unable to allocate temporary path for ${targetPath}`);
 }
 
 function escapeHtml(text: string): string {

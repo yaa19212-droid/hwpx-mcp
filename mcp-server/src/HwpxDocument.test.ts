@@ -30,6 +30,7 @@ async function createTestHwpxBuffer(): Promise<Buffer> {
   <hp:tbl id="100" rowCnt="2" colCnt="2">
     <hp:tr>
       <hp:tc colAddr="0" rowAddr="0" colSpan="1" rowSpan="1">
+        <hp:cellAddr colAddr="0" rowAddr="0"/>
         <hp:subList>
           <hp:p id="10">
             <hp:run><hp:t>Cell 0,0</hp:t></hp:run>
@@ -37,6 +38,7 @@ async function createTestHwpxBuffer(): Promise<Buffer> {
         </hp:subList>
       </hp:tc>
       <hp:tc colAddr="1" rowAddr="0" colSpan="1" rowSpan="1">
+        <hp:cellAddr colAddr="1" rowAddr="0"/>
         <hp:subList>
           <hp:p id="11">
             <hp:run><hp:t></hp:t></hp:run>
@@ -46,6 +48,7 @@ async function createTestHwpxBuffer(): Promise<Buffer> {
     </hp:tr>
     <hp:tr>
       <hp:tc colAddr="0" rowAddr="1" colSpan="1" rowSpan="1">
+        <hp:cellAddr colAddr="0" rowAddr="1"/>
         <hp:subList>
           <hp:p id="20">
             <hp:run><hp:t>Cell 1,0</hp:t></hp:run>
@@ -53,6 +56,7 @@ async function createTestHwpxBuffer(): Promise<Buffer> {
         </hp:subList>
       </hp:tc>
       <hp:tc colAddr="1" rowAddr="1" colSpan="1" rowSpan="1">
+        <hp:cellAddr colAddr="1" rowAddr="1"/>
         <hp:subList>
           <hp:p id="21">
             <hp:run><hp:t>Cell 1,1</hp:t></hp:run>
@@ -188,6 +192,56 @@ describe('HwpxDocument - Table Cell Update', () => {
     expect(savedXml).toContain('rowCnt="2"');
     expect(savedXml).toContain('hp:subList');
     expect(savedXml).toContain('Modified'); // New text
+  });
+
+  it('should renumber rowAddr after row insert and delete', async () => {
+    const doc = await HwpxDocument.createFromBuffer('test-id', testFilePath, fs.readFileSync(testFilePath));
+
+    expect(doc.insertTableRow(0, 0, 0, ['Inserted 0', 'Inserted 1'])).toBe(true);
+    let savedBuffer = await doc.save();
+    let savedZip = await JSZip.loadAsync(savedBuffer);
+    let savedXml = await savedZip.file('Contents/section0.xml')?.async('string');
+
+    expect(savedXml).toContain('rowCnt="3"');
+    expect((savedXml?.match(/rowAddr="0"/g) || []).length).toBe(4); // tc + cellAddr for two cells
+    expect((savedXml?.match(/rowAddr="1"/g) || []).length).toBe(4);
+    expect((savedXml?.match(/rowAddr="2"/g) || []).length).toBe(4);
+
+    const reloaded = await HwpxDocument.createFromBuffer('test-id-2', testFilePath, savedBuffer);
+    expect(reloaded.deleteTableRow(0, 0, 1)).toBe(true);
+    savedBuffer = await reloaded.save();
+    savedZip = await JSZip.loadAsync(savedBuffer);
+    savedXml = await savedZip.file('Contents/section0.xml')?.async('string');
+
+    expect(savedXml).toContain('rowCnt="2"');
+    expect((savedXml?.match(/rowAddr="0"/g) || []).length).toBe(4);
+    expect((savedXml?.match(/rowAddr="1"/g) || []).length).toBe(4);
+    expect(savedXml).not.toContain('rowAddr="2"');
+  });
+
+  it('should update both tc and cellAddr colAddr after column insert and delete', async () => {
+    const doc = await HwpxDocument.createFromBuffer('test-id', testFilePath, fs.readFileSync(testFilePath));
+
+    expect(doc.insertTableColumn(0, 0, 0)).toBe(true);
+    let savedBuffer = await doc.save();
+    let savedZip = await JSZip.loadAsync(savedBuffer);
+    let savedXml = await savedZip.file('Contents/section0.xml')?.async('string');
+
+    expect(savedXml).toContain('colCnt="3"');
+    expect((savedXml?.match(/colAddr="0"/g) || []).length).toBe(4); // tc + cellAddr for two rows
+    expect((savedXml?.match(/colAddr="1"/g) || []).length).toBe(4);
+    expect((savedXml?.match(/colAddr="2"/g) || []).length).toBe(4);
+
+    const reloaded = await HwpxDocument.createFromBuffer('test-id-2', testFilePath, savedBuffer);
+    expect(reloaded.deleteTableColumn(0, 0, 1)).toBe(true);
+    savedBuffer = await reloaded.save();
+    savedZip = await JSZip.loadAsync(savedBuffer);
+    savedXml = await savedZip.file('Contents/section0.xml')?.async('string');
+
+    expect(savedXml).toContain('colCnt="2"');
+    expect((savedXml?.match(/colAddr="0"/g) || []).length).toBe(4);
+    expect((savedXml?.match(/colAddr="1"/g) || []).length).toBe(4);
+    expect(savedXml).not.toContain('colAddr="2"');
   });
 });
 
@@ -721,6 +775,25 @@ describe('HwpxDocument - Paragraph Insert', () => {
     const reloadedDoc = await HwpxDocument.createFromBuffer('test-reload', 'test.hwpx', savedBuffer);
     const docText = reloadedDoc.getAllText();
     expect(docText).toContain('Hello World - 새 문서 테스트');
+  });
+
+  it('should escape metadata in newly created package XML', async () => {
+    const doc = HwpxDocument.createNew('test-escaped-doc', 'A & B <Plan>', 'Author "Q"');
+    const savedBuffer = await doc.save();
+    const savedZip = await JSZip.loadAsync(savedBuffer);
+    const contentHpf = await savedZip.file('Contents/content.hpf')?.async('string');
+
+    expect(contentHpf).toContain('<opf:title>A &amp; B &lt;Plan&gt;</opf:title>');
+    expect(contentHpf).toContain('Author &quot;Q&quot;');
+    expect(contentHpf).not.toContain('<opf:title>A & B <Plan></opf:title>');
+  });
+
+  it('should reject raw XML updates for missing sections', async () => {
+    const doc = HwpxDocument.createNew('test-raw-section');
+    const result = await doc.setRawSectionXml(3, '<?xml version="1.0"?><hs:sec></hs:sec>', false);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Section 3 not found');
   });
 
   it('should validate header.xml in newly created document', async () => {

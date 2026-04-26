@@ -2913,10 +2913,13 @@ export class HwpxParser {
 
       // If not in tc attributes, try cellAddr element
       if (!rowAddrMatch || !colAddrMatch) {
-        const cellAddrMatch = xml.match(/<hp:cellAddr[^>]*colAddr="(\d+)"[^>]*rowAddr="(\d+)"/);
+        const cellAddrMatch = xml.match(/<hp:cellAddr[^>]*>/);
         if (cellAddrMatch) {
-          cell.colAddr = parseInt(cellAddrMatch[1]);
-          cell.rowAddr = parseInt(cellAddrMatch[2]);
+          const cellAddrTag = cellAddrMatch[0];
+          const cellAddrColMatch = cellAddrTag.match(/colAddr="(\d+)"/);
+          const cellAddrRowMatch = cellAddrTag.match(/rowAddr="(\d+)"/);
+          if (cellAddrColMatch) cell.colAddr = parseInt(cellAddrColMatch[1]);
+          if (cellAddrRowMatch) cell.rowAddr = parseInt(cellAddrRowMatch[1]);
         }
       } else {
         if (rowAddrMatch) cell.rowAddr = parseInt(rowAddrMatch[1]);
