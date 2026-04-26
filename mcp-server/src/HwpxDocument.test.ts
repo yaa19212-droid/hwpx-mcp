@@ -86,6 +86,62 @@ async function createTestHwpxBuffer(): Promise<Buffer> {
   return await zip.generateAsync({ type: 'nodebuffer' });
 }
 
+async function createNestedCellAddrHwpxBuffer(includeTcAddressAttrs = true): Promise<Buffer> {
+  const zip = new JSZip();
+  const tcAttrs = includeTcAddressAttrs ? ' colAddr="1" rowAddr="0"' : '';
+
+  const headerXml = `<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
+  <hh:docInfo>
+    <hh:title>Nested CellAddr Test</hh:title>
+  </hh:docInfo>
+</hh:head>`;
+
+  const sectionXml = `<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:tbl id="100" rowCnt="1" colCnt="2">
+    <hp:tr>
+      <hp:tc colAddr="0" rowAddr="0" colSpan="1" rowSpan="1">
+        <hp:cellAddr colAddr="0" rowAddr="0"/>
+        <hp:subList>
+          <hp:p id="10"><hp:run><hp:t>Outer 0</hp:t></hp:run></hp:p>
+        </hp:subList>
+      </hp:tc>
+      <hp:tc${tcAttrs} colSpan="1" rowSpan="1">
+        <hp:subList>
+          <hp:p id="11">
+            <hp:run><hp:t>Outer 1</hp:t></hp:run>
+            <hp:tbl id="200" rowCnt="1" colCnt="1">
+              <hp:tr>
+                <hp:tc colSpan="1" rowSpan="1">
+                  <hp:subList>
+                    <hp:p id="20"><hp:run><hp:t>Nested</hp:t></hp:run></hp:p>
+                  </hp:subList>
+                  <hp:cellAddr colAddr="0" rowAddr="0"/>
+                </hp:tc>
+              </hp:tr>
+            </hp:tbl>
+          </hp:p>
+        </hp:subList>
+        <hp:cellAddr colAddr="1" rowAddr="0"/>
+      </hp:tc>
+    </hp:tr>
+  </hp:tbl>
+</hs:sec>`;
+
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+</Types>`;
+
+  zip.file('Contents/header.xml', headerXml);
+  zip.file('Contents/section0.xml', sectionXml);
+  zip.file('[Content_Types].xml', contentTypesXml);
+
+  return await zip.generateAsync({ type: 'nodebuffer' });
+}
+
 describe('HwpxDocument - Table Cell Update', () => {
   let testFilePath: string;
 
@@ -242,6 +298,30 @@ describe('HwpxDocument - Table Cell Update', () => {
     expect((savedXml?.match(/colAddr="0"/g) || []).length).toBe(4);
     expect((savedXml?.match(/colAddr="1"/g) || []).length).toBe(4);
     expect(savedXml).not.toContain('colAddr="2"');
+  });
+
+  it('should update only the parent direct cellAddr when shifting a cell with a nested table', async () => {
+    const buffer = await createNestedCellAddrHwpxBuffer(true);
+    const doc = await HwpxDocument.createFromBuffer('test-nested-celladdr', testFilePath, buffer);
+
+    expect(doc.insertTableColumn(0, 0, 0)).toBe(true);
+    const savedBuffer = await doc.save();
+    const savedZip = await JSZip.loadAsync(savedBuffer);
+    const savedXml = await savedZip.file('Contents/section0.xml')?.async('string');
+
+    expect(savedXml).toContain('<hp:tc colAddr="2" rowAddr="0" colSpan="1" rowSpan="1">');
+    expect(savedXml).toContain('<hp:p id="20"><hp:run><hp:t>Nested</hp:t></hp:run></hp:p>');
+    expect(savedXml).toContain('<hp:cellAddr colAddr="0" rowAddr="0"/>');
+    expect(savedXml).toContain('</hp:subList>\n        <hp:cellAddr colAddr="2" rowAddr="0"/>');
+  });
+
+  it('should parse the parent direct cellAddr instead of nested cellAddr fallback', async () => {
+    const buffer = await createNestedCellAddrHwpxBuffer(false);
+    const doc = await HwpxDocument.createFromBuffer('test-nested-celladdr-fallback', testFilePath, buffer);
+    const table = doc.getTable(0, 0);
+
+    expect(table?.data[0][1].style.colAddr).toBe(1);
+    expect(table?.data[0][1].style.rowAddr).toBe(0);
   });
 });
 

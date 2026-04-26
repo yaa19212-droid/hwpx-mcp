@@ -6811,14 +6811,34 @@ export class HwpxDocument {
     });
   }
 
-  private updateFirstCellAddrAttributes(xml: string, attrs: Record<string, number | string>): string {
-    return xml.replace(/<(?:hp|hs|hc):cellAddr\b[^>]*\/?>/, (tag) => {
-      let updated = tag;
-      for (const [name, value] of Object.entries(attrs)) {
-        updated = this.setXmlAttribute(updated, name, value);
+  private updateDirectCellAddrAttributes(xml: string, attrs: Record<string, number | string>): string {
+    const tagRegex = /<(\/?)(?:hp|hs|hc):(tc|cellAddr)\b[^>]*(\/?)>/g;
+    let match;
+    let tcDepth = 0;
+
+    while ((match = tagRegex.exec(xml)) !== null) {
+      const [tag, closingSlash, tagName, selfClosingSlash] = match;
+
+      if (tagName === 'tc') {
+        if (closingSlash) {
+          tcDepth = Math.max(0, tcDepth - 1);
+        } else if (!selfClosingSlash) {
+          tcDepth++;
+        }
+        continue;
       }
-      return updated;
-    });
+
+      if (tagName === 'cellAddr' && tcDepth === 1) {
+        let updated = tag;
+        for (const [name, value] of Object.entries(attrs)) {
+          updated = this.setXmlAttribute(updated, name, value);
+        }
+
+        return xml.substring(0, match.index) + updated + xml.substring(match.index + tag.length);
+      }
+    }
+
+    return xml;
   }
 
   private updateCellAddressXml(cellXml: string, attrs: { rowAddr?: number; colAddr?: number }): string {
@@ -6827,7 +6847,7 @@ export class HwpxDocument {
     if (attrs.colAddr !== undefined) attrEntries.colAddr = attrs.colAddr;
 
     let updated = this.updateFirstElementTagAttributes(cellXml, 'tc', attrEntries);
-    updated = this.updateFirstCellAddrAttributes(updated, attrEntries);
+    updated = this.updateDirectCellAddrAttributes(updated, attrEntries);
     return updated;
   }
 

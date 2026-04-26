@@ -2360,6 +2360,7 @@ Call get_tool_guide with: template, table, image, search, read, create`
           let backupPath: string | null = null;
           const tempPath = uniqueSiblingPath(savePath, '.tmp');
           let restorePath: string | null = null;
+          let restoreCleanupWarning: string | null = null;
 
           // Create backup if file exists and backup is enabled
           if (createBackup && fs.existsSync(savePath)) {
@@ -2448,7 +2449,11 @@ Call get_tool_guide with: template, table, image, search, read, create`
             try {
               fs.renameSync(tempPath, savePath);
               if (restorePath && fs.existsSync(restorePath)) {
-                fs.unlinkSync(restorePath);
+                try {
+                  fs.unlinkSync(restorePath);
+                } catch (cleanupErr) {
+                  restoreCleanupWarning = `Saved successfully, but failed to remove restore file ${restorePath}: ${cleanupErr}`;
+                }
               }
             } catch (renameErr) {
               if (restorePath && fs.existsSync(restorePath) && !fs.existsSync(savePath)) {
@@ -2460,7 +2465,8 @@ Call get_tool_guide with: template, table, image, search, read, create`
             return success({
               message: `Saved to ${savePath}`,
               backup_created: backupPath ? true : false,
-              integrity_verified: verifyIntegrity
+              integrity_verified: verifyIntegrity,
+              restore_cleanup_warning: restoreCleanupWarning || undefined
             });
           } catch (saveErr) {
             // Clean up temp file if exists
@@ -2471,7 +2477,7 @@ Call get_tool_guide with: template, table, image, search, read, create`
               try { fs.renameSync(restorePath, savePath); } catch {}
             }
             // Restore from backup if save fails
-            if (backupPath && fs.existsSync(backupPath)) {
+            if (backupPath && fs.existsSync(backupPath) && !fs.existsSync(savePath)) {
               fs.copyFileSync(backupPath, savePath);
               return error(`Save failed, restored from backup: ${saveErr}`);
             }
@@ -4411,10 +4417,9 @@ Call get_tool_guide with: template, table, image, search, read, create`
             message: result.message,
           });
         } else {
-          return error(JSON.stringify({
-            message: result.message,
+          return error(result.message, {
             issues: result.issues,
-          }));
+          });
         }
       }
 
@@ -4639,8 +4644,8 @@ function success(data: any) {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
-function error(message: string) {
-  return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: message }) }] };
+function error(message: string, details?: Record<string, unknown>) {
+  return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: message, ...details }) }] };
 }
 
 function uniqueSiblingPath(targetPath: string, suffix: string): string {

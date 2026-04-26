@@ -2913,9 +2913,8 @@ export class HwpxParser {
 
       // If not in tc attributes, try cellAddr element
       if (!rowAddrMatch || !colAddrMatch) {
-        const cellAddrMatch = xml.match(/<hp:cellAddr[^>]*>/);
-        if (cellAddrMatch) {
-          const cellAddrTag = cellAddrMatch[0];
+        const cellAddrTag = this.findDirectCellAddrTag(xml);
+        if (cellAddrTag) {
           const cellAddrColMatch = cellAddrTag.match(/colAddr="(\d+)"/);
           const cellAddrRowMatch = cellAddrTag.match(/rowAddr="(\d+)"/);
           if (cellAddrColMatch) cell.colAddr = parseInt(cellAddrColMatch[1]);
@@ -3084,6 +3083,31 @@ export class HwpxParser {
     this.parseCellContent(contentXml, cell);
 
     return cell;
+  }
+
+  private static findDirectCellAddrTag(xml: string): string | null {
+    const tagRegex = /<(\/?)hp:(tc|cellAddr)\b[^>]*(\/?)>/g;
+    let match;
+    let tcDepth = 0;
+
+    while ((match = tagRegex.exec(xml)) !== null) {
+      const [tag, closingSlash, tagName, selfClosingSlash] = match;
+
+      if (tagName === 'tc') {
+        if (closingSlash) {
+          tcDepth = Math.max(0, tcDepth - 1);
+        } else if (!selfClosingSlash) {
+          tcDepth++;
+        }
+        continue;
+      }
+
+      if (tagName === 'cellAddr' && tcDepth === 1) {
+        return tag;
+      }
+    }
+
+    return null;
   }
 
   private static parseCellContent(contentXml: string, cell: TableCell): void {
