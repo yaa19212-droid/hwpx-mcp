@@ -205,11 +205,13 @@ claude mcp add hwpx-mcp node /path/to/hwpx-mcp/mcp-server/dist/index.js
 
 ### 3. 설치 확인
 
-클라이언트 재시작 후 MCP 도구 목록에서 `hwpx-mcp` 서버와 77개 도구가 표시되면 성공!
+클라이언트 재시작 후 MCP 도구 목록에서 `hwpx-mcp` 서버와 125개 도구가 표시되면 성공!
 
 ---
 
-## 🔌 MCP Tools (77개)
+## 🔌 주요 MCP Tools
+
+현재 `mcp-server/src/index.ts` 기준으로 MCP 도구는 125개입니다. 아래 표는 자주 쓰는 대표 도구를 워크플로우별로 정리한 것이며, 전체 목록은 MCP 클라이언트의 도구 목록 또는 `get_tool_guide({ workflow: "all" })`에서 확인할 수 있습니다.
 
 ### 📁 문서 관리 (Document Management) - 5개
 
@@ -460,9 +462,9 @@ await mcp.replace_text_in_cell({
 | 포맷 | 확장자 | 읽기 | 쓰기 |
 |------|--------|:----:|:----:|
 | HWPX | .hwpx | ✅ | ✅ |
-| HWP | .hwp | ❌ | ❌ |
+| HWP | .hwp | 제한적 | ❌ |
 
-> **Note**: HWP(바이너리) 파일은 지원하지 않습니다. 한컴오피스에서 HWPX로 변환 후 사용하세요.
+> **Note**: 이 서버의 주 지원 포맷은 HWPX입니다. HWP(바이너리)는 편집/저장을 지원하지 않으며, 안정적인 작업을 위해 한컴오피스에서 HWPX로 변환 후 사용하세요.
 
 ---
 

@@ -1,14 +1,14 @@
 # HWPX MCP Server
 
-HWP/HWPX 문서를 AI로 읽고 편집할 수 있는 Model Context Protocol (MCP) 서버입니다.
+HWPX 문서를 AI로 읽고 편집할 수 있는 Model Context Protocol (MCP) 서버입니다.
 
 ## 특징
 
-- **89개 도구**: 문서의 모든 요소를 프로그래밍 방식으로 제어
+- **125개 도구**: 문서의 주요 요소를 프로그래밍 방식으로 제어
 - **HWPX 완전 편집**: 텍스트, 테이블, 이미지, 스타일, 머리글/꼬리글 등
-- **HWP 읽기 지원**: 레거시 HWP 바이너리 포맷 읽기
+- **HWPX 중심 지원**: 레거시 HWP 바이너리는 편집/저장 불가
 - **XML 무결성 보장**: 모든 편집이 HWPML 규격에 맞게 XML에 저장
-- **24개 E2E 테스트 통과**: save-reload 검증 완료
+- **회귀 테스트 포함**: save-reload, XML 손상 방지, 표/이미지/텍스트 편집 검증
 
 ## 설치
 
@@ -51,13 +51,15 @@ npm run build
 }
 ```
 
-## 도구 목록 (89개)
+## 주요 도구 목록
 
-### 문서 관리 (7개)
+현재 `src/index.ts` 기준 MCP 도구는 125개입니다. 아래 목록은 대표 도구를 기능별로 정리한 것이며, 전체 목록은 MCP 클라이언트의 도구 목록 또는 `get_tool_guide({ workflow: "all" })`에서 확인할 수 있습니다.
+
+### 문서 관리
 | 도구 | 설명 |
 |------|------|
 | `get_tool_guide` | 도구 가이드 조회 |
-| `open_document` | 문서 열기 (HWPX/HWP) |
+| `open_document` | 문서 열기 (HWPX 중심) |
 | `create_document` | 새 HWPX 문서 생성 |
 | `save_document` | 문서 저장 |
 | `close_document` | 문서 닫기 |
@@ -65,7 +67,7 @@ npm run build
 | `get_document_metadata` | 메타데이터 조회 |
 | `set_document_metadata` | 메타데이터 설정 |
 
-### 문서 조회 (9개)
+### 문서 조회
 | 도구 | 설명 |
 |------|------|
 | `get_document_text` | 전체 텍스트 |
@@ -78,7 +80,7 @@ npm run build
 | `find_insert_position_after_header` | 헤더 다음 위치 찾기 |
 | `find_insert_position_after_table` | 테이블 다음 위치 찾기 |
 
-### 텍스트 편집 (11개)
+### 텍스트 편집
 | 도구 | 설명 |
 |------|------|
 | `insert_paragraph` | 문단 삽입 |
@@ -93,7 +95,7 @@ npm run build
 | `batch_replace` | 일괄 치환 |
 | `find_paragraph_by_text` | 텍스트로 문단 찾기 |
 
-### 서식 (스타일) (9개)
+### 서식 (스타일)
 | 도구 | 설명 |
 |------|------|
 | `get_text_style` | 문자 스타일 조회 |
@@ -107,7 +109,7 @@ npm run build
 | `get_column_def` | 단 설정 조회 |
 | `set_column_def` | 단 설정 |
 
-### 내어쓰기 (8개)
+### 내어쓰기
 | 도구 | 설명 |
 |------|------|
 | `get_hanging_indent` | 내어쓰기 조회 |
@@ -119,7 +121,7 @@ npm run build
 | `set_table_cell_auto_hanging_indent` | 셀 자동 내어쓰기 |
 | `remove_table_cell_hanging_indent` | 셀 내어쓰기 제거 |
 
-### 테이블 (23개)
+### 테이블
 | 도구 | 설명 |
 |------|------|
 | `get_tables` | 테이블 목록 |
@@ -147,7 +149,7 @@ npm run build
 | `copy_table` | 테이블 복사 |
 | `move_table` | 테이블 이동 |
 
-### 머리글/꼬리글/각주 (8개)
+### 머리글/꼬리글/각주
 | 도구 | 설명 |
 |------|------|
 | `get_header` | 머리글 조회 |
@@ -159,7 +161,7 @@ npm run build
 | `get_endnotes` | 미주 목록 |
 | `insert_endnote` | 미주 삽입 |
 
-### 이미지 (7개)
+### 이미지
 | 도구 | 설명 |
 |------|------|
 | `get_images` | 이미지 목록 |
@@ -170,7 +172,7 @@ npm run build
 | `insert_image_in_cell` | 셀에 이미지 삽입 |
 | `render_mermaid_in_cell` | 셀에 Mermaid 삽입 |
 
-### 북마크/하이퍼링크 (4개)
+### 북마크/하이퍼링크
 | 도구 | 설명 |
 |------|------|
 | `get_bookmarks` | 북마크 목록 |
@@ -178,7 +180,7 @@ npm run build
 | `get_hyperlinks` | 하이퍼링크 목록 |
 | `insert_hyperlink` | 하이퍼링크 삽입 |
 
-### 수식/메모 (6개)
+### 수식/메모
 | 도구 | 설명 |
 |------|------|
 | `get_equations` | 수식 목록 |
@@ -187,14 +189,14 @@ npm run build
 | `insert_memo` | 메모 삽입 |
 | `delete_memo` | 메모 삭제 |
 
-### 도형 (3개)
+### 도형
 | 도구 | 설명 |
 |------|------|
 | `insert_line` | 선 삽입 |
 | `insert_rect` | 사각형 삽입 |
 | `insert_ellipse` | 타원 삽입 |
 
-### 섹션/페이지 (5개)
+### 섹션/페이지
 | 도구 | 설명 |
 |------|------|
 | `get_sections` | 섹션 목록 |
@@ -203,19 +205,19 @@ npm run build
 | `get_page_settings` | 페이지 설정 조회 |
 | `set_page_settings` | 페이지 설정 |
 
-### 실행 취소/다시 실행 (2개)
+### 실행 취소/다시 실행
 | 도구 | 설명 |
 |------|------|
 | `undo` | 실행 취소 |
 | `redo` | 다시 실행 |
 
-### 내보내기 (2개)
+### 내보내기
 | 도구 | 설명 |
 |------|------|
 | `export_to_text` | TXT 내보내기 |
 | `export_to_html` | HTML 내보내기 |
 
-### 고급/디버깅 (8개)
+### 고급/디버깅
 | 도구 | 설명 |
 |------|------|
 | `get_section_xml` | 섹션 XML 조회 |
@@ -227,7 +229,7 @@ npm run build
 | `chunk_document` | 문서 청킹 |
 | `invalidate_reading_cache` | 읽기 캐시 무효화 |
 
-### 검색/인덱싱 (5개)
+### 검색/인덱싱
 | 도구 | 설명 |
 |------|------|
 | `search_chunks` | 청크 검색 |
@@ -287,7 +289,7 @@ node test-new-persistence-e2e.mjs  # 8개 persistence E2E 테스트
 ## 알려진 제한사항
 
 - **각주/미주/북마크/하이퍼링크 삽입**: 메모리에서만 동작, save 후 XML 미반영 (읽기는 정상)
-- **HWP 파일**: 읽기 전용 (편집 불가)
+- **HWP 파일**: 편집/저장 불가. 안정적인 작업은 HWPX 변환 후 사용 권장
 - **secPr 문단 스타일**: 첫 번째 특수 문단에서 스타일 reload 제한
 
 ## 변경 이력
