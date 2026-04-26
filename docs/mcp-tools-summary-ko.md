@@ -1,6 +1,6 @@
 # MCP 도구 한국어 요약
 
-`mcp-server/src/index.ts` 기준 MCP 도구 125개의 간단 요약입니다. HWPX 편집 도구가 주 대상이며, HWP 파일은 편집/저장을 지원하지 않습니다.
+`mcp-server/src/index.ts` 기준 MCP 도구 130개의 간단 요약입니다. HWPX 편집 도구가 주 대상이며, HWP 파일은 편집/저장을 지원하지 않습니다.
 
 ## 사용 가이드
 
@@ -50,6 +50,7 @@
 |---|---|
 | `search_text` | 문서 텍스트를 검색합니다. 기본적으로 표 셀도 포함합니다. |
 | `replace_text` | 문서 전체에서 텍스트를 일괄 치환합니다. |
+| `replace_text_with_style` | 텍스트를 치환한 뒤 새 텍스트에 문서 스타일 슬롯/ID를 적용합니다. |
 | `batch_replace` | 여러 치환 규칙을 한 번에 적용합니다. |
 | `replace_text_in_cell` | 특정 표 셀 안의 텍스트만 치환합니다. |
 
@@ -62,9 +63,12 @@
 | `set_paragraph_style` | 문단 정렬, 줄간격, 여백 등 문단 서식을 설정합니다. |
 | `get_paragraph_style` | 문단 서식을 조회합니다. |
 | `get_styles` | 문서에 정의된 스타일 목록을 조회합니다. |
+| `get_style_slots` | 문서 스타일을 Ctrl+숫자 슬롯 형태로 조회하고 색상/굵기 등 요약을 반환합니다. |
 | `get_char_shapes` | 글자 모양 정의 목록을 조회합니다. |
 | `get_para_shapes` | 문단 모양 정의 목록을 조회합니다. |
 | `apply_style` | 문단에 지정된 스타일을 적용합니다. |
+| `apply_style_by_slot` | Ctrl+숫자 슬롯으로 문단 전체에 문서 스타일을 적용합니다. |
+| `apply_text_style` | 기존 텍스트 내용은 유지하고 일치하는 텍스트 범위에 문서 스타일을 적용합니다. |
 | `get_column_def` | 섹션의 단 설정을 조회합니다. |
 | `set_column_def` | 섹션의 단 설정을 수정합니다. |
 
@@ -114,6 +118,7 @@
 | `delete_table_column` | 표 열을 삭제합니다. |
 | `insert_table` | 새 표를 삽입합니다. |
 | `insert_nested_table` | 표 셀 안에 중첩 표를 삽입합니다. |
+| `insert_paragraph_in_table_cell` | 표 셀 안의 특정 문단 뒤에 새 문단을 삽입합니다. |
 | `delete_table` | 문서에서 표 전체를 삭제합니다. |
 | `move_table` | 표 XML 구조를 보존하며 표를 다른 위치로 이동합니다. |
 | `copy_table` | 표를 복사하고 새 ID를 생성해 다른 위치에 삽입합니다. |

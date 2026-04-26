@@ -530,6 +530,34 @@ export interface StyleDef {
   nextStyleIdRef?: number;
 }
 
+export interface StyleSlotInfo {
+  ctrlSlot: number;
+  styleId: number;
+  name: string;
+  type: string;
+  paraPrIDRef?: number;
+  charPrIDRef?: number;
+  nextStyleIDRef?: number;
+  assumedCtrlMapping: boolean;
+  character?: {
+    fontSize?: number;
+    fontColor?: string;
+    backgroundColor?: string;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean | CharacterStyle['underline'];
+  };
+  paragraph?: {
+    align?: ParagraphStyle['align'];
+    lineSpacing?: number;
+    marginTop?: number;
+    marginBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    firstLineIndent?: number;
+  };
+}
+
 // 4.3.9 Memo Info
 export interface MemoShape {
   id: number;

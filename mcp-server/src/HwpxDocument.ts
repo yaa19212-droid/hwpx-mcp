@@ -22,6 +22,7 @@ import {
   CharShape,
   ParaShape,
   StyleDef,
+  StyleSlotInfo,
   HwpxLine,
   HwpxRect,
   HwpxEllipse,
@@ -230,6 +231,24 @@ export class HwpxDocument {
     afterElementIndex: number;
     paragraphId: string;
     text: string;
+    styleId?: number;
+    paraPrIDRef?: number;
+    charPrIDRef?: number;
+  }> = [];
+  private _pendingStyleRefApplications: Array<{
+    sectionIndex: number;
+    elementIndex: number;
+    styleId: number;
+    paraPrIDRef?: number;
+    charPrIDRef?: number;
+  }> = [];
+  private _pendingTextStyleApplications: Array<{
+    sectionIndex?: number;
+    searchText: string;
+    charPrIDRef: number;
+    caseSensitive?: boolean;
+    replaceAll?: boolean;
+    includeTables?: boolean;
   }> = [];
   private _pendingParagraphStyles: Array<{
     sectionIndex: number;
@@ -839,15 +858,18 @@ export class HwpxDocument {
     return true;
   }
 
-  insertParagraph(sectionIndex: number, afterElementIndex: number, text: string = ''): number {
+  insertParagraph(sectionIndex: number, afterElementIndex: number, text: string = '', options?: { styleId?: number; ctrlSlot?: number }): number {
     const section = this._content.sections[sectionIndex];
     if (!section) return -1;
 
     this.saveState();
     const paragraphId = Math.random().toString(36).substring(2, 11);
+    const styleRefs = this.resolveStyleRefs(options);
     const newParagraph: HwpxParagraph = {
       id: paragraphId,
-      runs: [{ text }],
+      style: styleRefs?.styleId,
+      paraPrId: styleRefs?.paraPrIDRef,
+      runs: [{ text, charPrIDRef: styleRefs?.charPrIDRef }],
     };
 
     const newElement: SectionElement = { type: 'paragraph', data: newParagraph };
@@ -859,6 +881,9 @@ export class HwpxDocument {
       afterElementIndex,
       paragraphId,
       text,
+      styleId: styleRefs?.styleId,
+      paraPrIDRef: styleRefs?.paraPrIDRef,
+      charPrIDRef: styleRefs?.charPrIDRef,
     });
 
     this.markModified();
@@ -4706,6 +4731,63 @@ export class HwpxDocument {
     }));
   }
 
+  getStyleSlots(): StyleSlotInfo[] {
+    if (!this._content.styles?.styles) return [];
+
+    return Array.from(this._content.styles.styles.values())
+      .sort((a, b) => a.id - b.id)
+      .map((style) => {
+        const charShape = style.charPrIdRef !== undefined
+          ? this._content.styles?.charShapes?.get(style.charPrIdRef)
+          : undefined;
+        const paraShape = style.paraPrIdRef !== undefined
+          ? this._content.styles?.paraShapes?.get(style.paraPrIdRef)
+          : undefined;
+
+        return {
+          ctrlSlot: style.id + 1,
+          styleId: style.id,
+          name: style.name || '',
+          type: style.type || 'para',
+          paraPrIDRef: style.paraPrIdRef,
+          charPrIDRef: style.charPrIdRef,
+          nextStyleIDRef: style.nextStyleIdRef,
+          assumedCtrlMapping: true,
+          character: charShape ? {
+            fontSize: charShape.height ? charShape.height / 100 : charShape.fontSize,
+            fontColor: charShape.textColor || charShape.color,
+            backgroundColor: charShape.shadeColor || charShape.backgroundColor,
+            bold: charShape.bold,
+            italic: charShape.italic,
+            underline: charShape.underline,
+          } : undefined,
+          paragraph: paraShape ? {
+            align: paraShape.align as ParagraphStyle['align'],
+            lineSpacing: paraShape.lineSpacing,
+            marginTop: paraShape.marginTop,
+            marginBottom: paraShape.marginBottom,
+            marginLeft: paraShape.marginLeft,
+            marginRight: paraShape.marginRight,
+            firstLineIndent: paraShape.firstLineIndent,
+          } : undefined,
+        };
+      });
+  }
+
+  private resolveStyleRefs(options?: { styleId?: number; ctrlSlot?: number }): { styleId: number; paraPrIDRef?: number; charPrIDRef?: number } | null {
+    const styleId = options?.styleId ?? (options?.ctrlSlot !== undefined ? options.ctrlSlot - 1 : undefined);
+    if (styleId === undefined) return null;
+
+    const style = this._content.styles?.styles?.get(styleId);
+    if (!style) return null;
+
+    return {
+      styleId,
+      paraPrIDRef: style.paraPrIdRef,
+      charPrIDRef: style.charPrIdRef,
+    };
+  }
+
   getCharShapes(): CharShape[] {
     if (!this._content.styles?.charShapes) return [];
     return Array.from(this._content.styles.charShapes.values());
@@ -4727,6 +4809,7 @@ export class HwpxDocument {
     this.saveState();
 
     paragraph.style = styleId;
+    paragraph.paraPrId = style.paraPrIdRef;
 
     // Apply paragraph shape if defined
     if (style.paraPrIdRef !== undefined && this._content.styles.paraShapes) {
@@ -4755,13 +4838,55 @@ export class HwpxDocument {
             underline: charShape.underline,
             fontSize: charShape.height ? charShape.height / 100 : undefined,
             fontColor: charShape.textColor,
+            backgroundColor: charShape.shadeColor,
           };
+          run.charPrIDRef = style.charPrIdRef;
         }
       }
     }
 
+    this._pendingStyleRefApplications.push({
+      sectionIndex,
+      elementIndex: paragraphIndex,
+      styleId,
+      paraPrIDRef: style.paraPrIdRef,
+      charPrIDRef: style.charPrIdRef,
+    });
+
     this.markModified();
     return true;
+  }
+
+  applyStyleBySlot(sectionIndex: number, paragraphIndex: number, ctrlSlot: number): boolean {
+    return this.applyStyle(sectionIndex, paragraphIndex, ctrlSlot - 1);
+  }
+
+  applyTextStyle(sectionIndex: number | undefined, searchText: string, options: { styleId?: number; ctrlSlot?: number; caseSensitive?: boolean; replaceAll?: boolean; includeTables?: boolean }): number {
+    const refs = this.resolveStyleRefs(options);
+    if (!refs?.charPrIDRef || !searchText) return 0;
+
+    const results = this.searchText(searchText, {
+      caseSensitive: options.caseSensitive,
+      includeTables: options.includeTables ?? true,
+    });
+    const count = results
+      .filter(result => sectionIndex === undefined || result.section === sectionIndex)
+      .reduce((sum, result) => sum + result.count, 0);
+
+    if (count === 0) return 0;
+
+    this.saveState();
+    this._pendingTextStyleApplications.push({
+      sectionIndex,
+      searchText,
+      charPrIDRef: refs.charPrIDRef,
+      caseSensitive: options.caseSensitive,
+      replaceAll: options.replaceAll ?? true,
+      includeTables: options.includeTables ?? true,
+    });
+    this.markModified();
+    this.invalidateReadingCache();
+    return count;
   }
 
   // ============================================================
@@ -4905,6 +5030,18 @@ export class HwpxDocument {
     if (this._pendingTextReplacements && this._pendingTextReplacements.length > 0) {
       await this.applyTextReplacementsToXml();
       this._pendingTextReplacements = [];
+    }
+
+    // Apply document style references to whole paragraphs
+    if (this._pendingStyleRefApplications && this._pendingStyleRefApplications.length > 0) {
+      await this.applyStyleRefsToXml();
+      this._pendingStyleRefApplications = [];
+    }
+
+    // Apply document style character references to matching text ranges
+    if (this._pendingTextStyleApplications && this._pendingTextStyleApplications.length > 0) {
+      await this.applyTextStyleApplicationsToXml();
+      this._pendingTextStyleApplications = [];
     }
 
     // Apply image inserts
@@ -5659,6 +5796,9 @@ export class HwpxDocument {
       afterElementIndex: number;
       paragraphId: string;
       text: string;
+      styleId?: number;
+      paraPrIDRef?: number;
+      charPrIDRef?: number;
     }>>();
 
     for (const insert of this._pendingParagraphInserts) {
@@ -5667,6 +5807,9 @@ export class HwpxDocument {
         afterElementIndex: insert.afterElementIndex,
         paragraphId: insert.paragraphId,
         text: insert.text,
+        styleId: insert.styleId,
+        paraPrIDRef: insert.paraPrIDRef,
+        charPrIDRef: insert.charPrIDRef,
       });
       insertsBySection.set(insert.sectionIndex, sectionInserts);
     }
@@ -5686,9 +5829,12 @@ export class HwpxDocument {
       for (const insert of sortedInserts) {
         // Escape text for XML
         const escapedText = this.escapeXml(insert.text);
+        const styleIDRef = insert.styleId ?? 0;
+        const paraPrIDRef = insert.paraPrIDRef ?? 0;
+        const charPrIDRef = insert.charPrIDRef ?? 0;
 
         // Build paragraph XML
-        const paragraphXml = `<hp:p id="${insert.paragraphId}" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="0"><hp:t>${escapedText}</hp:t></hp:run></hp:p>`;
+        const paragraphXml = `<hp:p id="${insert.paragraphId}" paraPrIDRef="${paraPrIDRef}" styleIDRef="${styleIDRef}" pageBreak="0" columnBreak="0" merged="0"><hp:run charPrIDRef="${charPrIDRef}"><hp:t>${escapedText}</hp:t></hp:run></hp:p>`;
 
         // Find the position to insert. Prefer locating the actual in-memory
         // target element in XML, because HWPX often stores section-level tables
@@ -12434,6 +12580,171 @@ export class HwpxDocument {
 
       this._zip.file(headerPath, headerXml);
     }
+  }
+
+  private async applyStyleRefsToXml(): Promise<void> {
+    if (!this._zip || this._pendingStyleRefApplications.length === 0) return;
+
+    const bySection = new Map<number, typeof this._pendingStyleRefApplications>();
+    for (const update of this._pendingStyleRefApplications) {
+      const existing = bySection.get(update.sectionIndex) || [];
+      existing.push(update);
+      bySection.set(update.sectionIndex, existing);
+    }
+
+    for (const [sectionIndex, updates] of bySection) {
+      const sectionPath = `Contents/section${sectionIndex}.xml`;
+      let sectionXml = await this._zip.file(sectionPath)?.async('string');
+      if (!sectionXml) continue;
+
+      const sortedUpdates = [...updates].sort((a, b) => b.elementIndex - a.elementIndex);
+      for (const update of sortedUpdates) {
+        const topLevelElements = this.findTopLevelElements(sectionXml);
+        const target = topLevelElements[update.elementIndex];
+        if (!target || target.type !== 'p') continue;
+
+        const prefix = target.content.match(/<(hp|hs|hc):p\b/)?.[1] || 'hp';
+        const paragraphEnd = this.findParagraphEndFromStart(sectionXml, target.start, prefix);
+        if (!paragraphEnd) continue;
+
+        let paragraphXml = sectionXml.slice(target.start, paragraphEnd);
+        paragraphXml = paragraphXml.replace(/^<[^:]+:p\b[^>]*>/, (tag) => {
+          let updated = this.setXmlAttribute(tag, 'styleIDRef', update.styleId);
+          if (update.paraPrIDRef !== undefined) {
+            updated = this.setXmlAttribute(updated, 'paraPrIDRef', update.paraPrIDRef);
+          }
+          return updated;
+        });
+
+        if (update.charPrIDRef !== undefined) {
+          paragraphXml = paragraphXml.replace(/<((?:hp|hs|hc):run)\b([^>]*)>/g, (tag, runName, attrs) => {
+            if (/charPrIDRef="[^"]*"/.test(attrs)) {
+              return `<${runName}${attrs.replace(/charPrIDRef="[^"]*"/, `charPrIDRef="${update.charPrIDRef}"`)}>`;
+            }
+            return `<${runName} charPrIDRef="${update.charPrIDRef}"${attrs}>`;
+          });
+        }
+
+        sectionXml = sectionXml.slice(0, target.start) + paragraphXml + sectionXml.slice(paragraphEnd);
+      }
+
+      this._zip.file(sectionPath, sectionXml);
+    }
+  }
+
+  private async applyTextStyleApplicationsToXml(): Promise<void> {
+    if (!this._zip || this._pendingTextStyleApplications.length === 0) return;
+
+    const sectionIndices = new Set<number>();
+    for (const update of this._pendingTextStyleApplications) {
+      if (update.sectionIndex !== undefined) {
+        sectionIndices.add(update.sectionIndex);
+      } else {
+        for (let i = 0; i < this._content.sections.length; i++) sectionIndices.add(i);
+      }
+    }
+
+    for (const sectionIndex of sectionIndices) {
+      const sectionPath = `Contents/section${sectionIndex}.xml`;
+      let sectionXml = await this._zip.file(sectionPath)?.async('string');
+      if (!sectionXml) continue;
+
+      const tableRanges = this.findAllTables(sectionXml).map(table => ({ start: table.startIndex, end: table.endIndex }));
+      for (const update of this._pendingTextStyleApplications) {
+        if (update.sectionIndex !== undefined && update.sectionIndex !== sectionIndex) continue;
+        sectionXml = this.applyTextStyleToSectionXml(sectionXml, tableRanges, update);
+      }
+
+      this._zip.file(sectionPath, sectionXml);
+    }
+  }
+
+  private applyTextStyleToSectionXml(
+    xml: string,
+    tableRanges: Array<{ start: number; end: number }>,
+    update: typeof this._pendingTextStyleApplications[0]
+  ): string {
+    const runRegex = /<((?:hp|hs|hc):run)\b([^>]*)>([\s\S]*?)<\/\1>/g;
+    const replacements: Array<{ start: number; end: number; xml: string }> = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = runRegex.exec(xml)) !== null) {
+      const runStart = match.index;
+      const isInsideTable = tableRanges.some(range => runStart > range.start && runStart < range.end);
+      if (isInsideTable && update.includeTables === false) continue;
+
+      const runXml = match[0];
+      const runName = match[1];
+      const attrs = match[2] || '';
+      const inner = match[3] || '';
+      const textMatch = inner.match(/<((?:hp|hs|hc):t)\b([^>]*)>([\s\S]*?)<\/\1>/);
+      if (!textMatch) continue;
+
+      const rawText = textMatch[3];
+      const text = this.unescapeXml(rawText);
+      const ranges = this.findTextRanges(text, update.searchText, {
+        caseSensitive: update.caseSensitive,
+        replaceAll: update.replaceAll,
+      });
+      if (ranges.length === 0) continue;
+
+      const oldCharPrMatch = attrs.match(/charPrIDRef="([^"]*)"/);
+      const oldCharPrIDRef = oldCharPrMatch?.[1] || '0';
+      const pieces: string[] = [];
+      let cursor = 0;
+      for (const range of ranges) {
+        if (range.start > cursor) {
+          pieces.push(this.buildStyledTextRun(runName, oldCharPrIDRef, text.slice(cursor, range.start)));
+        }
+        pieces.push(this.buildStyledTextRun(runName, String(update.charPrIDRef), text.slice(range.start, range.end)));
+        cursor = range.end;
+      }
+      if (cursor < text.length) {
+        pieces.push(this.buildStyledTextRun(runName, oldCharPrIDRef, text.slice(cursor)));
+      }
+
+      replacements.push({
+        start: runStart,
+        end: runStart + runXml.length,
+        xml: pieces.join(''),
+      });
+    }
+
+    let result = xml;
+    for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+      result = result.slice(0, replacement.start) + replacement.xml + result.slice(replacement.end);
+    }
+    return result;
+  }
+
+  private findTextRanges(text: string, searchText: string, options: { caseSensitive?: boolean; replaceAll?: boolean }): Array<{ start: number; end: number }> {
+    const ranges: Array<{ start: number; end: number }> = [];
+    const haystack = options.caseSensitive ? text : text.toLowerCase();
+    const needle = options.caseSensitive ? searchText : searchText.toLowerCase();
+    if (!needle) return ranges;
+
+    let pos = 0;
+    while (pos <= haystack.length) {
+      const index = haystack.indexOf(needle, pos);
+      if (index === -1) break;
+      ranges.push({ start: index, end: index + needle.length });
+      if (options.replaceAll === false) break;
+      pos = index + needle.length;
+    }
+    return ranges;
+  }
+
+  private buildStyledTextRun(runName: string, charPrIDRef: string, text: string): string {
+    return `<${runName} charPrIDRef="${charPrIDRef}"><${runName.replace(':run', ':t')}>${this.escapeXml(text)}</${runName.replace(':run', ':t')}></${runName}>`;
+  }
+
+  private unescapeXml(text: string): string {
+    return text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
   }
 
   // ============================================================

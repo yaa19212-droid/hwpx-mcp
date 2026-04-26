@@ -220,6 +220,8 @@ Example: get_tool_guide({ workflow: "template" })`,
         after_index: { type: 'number', description: 'Insert after this paragraph index (-1 for beginning)' },
         text: { type: 'string', description: 'Paragraph text' },
         auto_hanging_indent: { type: 'boolean', description: 'Automatically apply hanging indent if marker detected (default: true)' },
+        style_id: { type: 'number', description: 'Optional document style ID to apply to the inserted paragraph' },
+        ctrl_slot: { type: 'number', description: 'Optional Ctrl+number style slot to apply (assumes ctrl_slot = style_id + 1)' },
       },
       required: ['doc_id', 'section_index', 'after_index', 'text'],
     },
@@ -569,6 +571,25 @@ When NOT to use:
         case_sensitive: { type: 'boolean', description: 'Case sensitive (default: false)' },
         regex: { type: 'boolean', description: 'Use regular expression (default: false)' },
         replace_all: { type: 'boolean', description: 'Replace all occurrences (default: true)' },
+      },
+      required: ['doc_id', 'old_text', 'new_text'],
+    },
+  },
+  {
+    name: 'replace_text_with_style',
+    description: 'Find and replace text, then apply a document style slot/ID to the inserted replacement text (HWPX only).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        old_text: { type: 'string', description: 'Text to find' },
+        new_text: { type: 'string', description: 'Replacement text' },
+        style_id: { type: 'number', description: 'Document style ID to apply to replacement text' },
+        ctrl_slot: { type: 'number', description: 'Ctrl+number style slot to apply to replacement text' },
+        case_sensitive: { type: 'boolean', description: 'Case sensitive (default false)' },
+        regex: { type: 'boolean', description: 'Use regular expression for replacement (default false)' },
+        replace_all: { type: 'boolean', description: 'Replace/style all occurrences (default true)' },
+        include_tables: { type: 'boolean', description: 'Apply style in table cells too (default true)' },
       },
       required: ['doc_id', 'old_text', 'new_text'],
     },
@@ -1847,6 +1868,17 @@ Positioning within cell:
     },
   },
   {
+    name: 'get_style_slots',
+    description: 'Get document style slots as Ctrl+number presets, including style IDs, names, paragraph refs, character refs, and visual summary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+      },
+      required: ['doc_id'],
+    },
+  },
+  {
     name: 'get_char_shapes',
     description: 'Get all character shape definitions',
     inputSchema: {
@@ -1880,6 +1912,38 @@ Positioning within cell:
         style_id: { type: 'number', description: 'Style ID to apply' },
       },
       required: ['doc_id', 'section_index', 'paragraph_index', 'style_id'],
+    },
+  },
+  {
+    name: 'apply_style_by_slot',
+    description: 'Apply a Ctrl+number style slot to a whole paragraph (HWPX only). Uses the current document style table.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        section_index: { type: 'number', description: 'Section index' },
+        paragraph_index: { type: 'number', description: 'Paragraph index' },
+        ctrl_slot: { type: 'number', description: 'Ctrl+number style slot (e.g. 9 for Ctrl+9)' },
+      },
+      required: ['doc_id', 'section_index', 'paragraph_index', 'ctrl_slot'],
+    },
+  },
+  {
+    name: 'apply_text_style',
+    description: 'Apply a document style slot/ID to existing matching text without changing the text content. Styles exact text ranges when they are within a single run.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_id: { type: 'string', description: 'Document ID' },
+        search_text: { type: 'string', description: 'Existing text to style' },
+        section_index: { type: 'number', description: 'Optional section index limit' },
+        style_id: { type: 'number', description: 'Document style ID to apply' },
+        ctrl_slot: { type: 'number', description: 'Ctrl+number style slot to apply' },
+        case_sensitive: { type: 'boolean', description: 'Case-sensitive search (default false)' },
+        replace_all: { type: 'boolean', description: 'Style all matches (default true)' },
+        include_tables: { type: 'boolean', description: 'Include table cells (default true)' },
+      },
+      required: ['doc_id', 'search_text'],
     },
   },
 
@@ -2576,7 +2640,11 @@ Call get_tool_guide with: template, table, image, search, read, create`
         const index = doc.insertParagraph(
           sectionIndex,
           args?.after_index as number,
-          args?.text as string
+          args?.text as string,
+          {
+            styleId: args?.style_id as number | undefined,
+            ctrlSlot: args?.ctrl_slot as number | undefined,
+          }
         );
 
         if (index === -1) return error('Failed to insert paragraph');
@@ -2917,6 +2985,31 @@ Call get_tool_guide with: template, table, image, search, read, create`
         });
 
         return success({ message: `Replaced ${count} occurrence(s)`, count });
+      }
+
+      case 'replace_text_with_style': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        if (doc.format === 'hwp') return error('HWP files are read-only');
+
+        const count = doc.replaceText(args?.old_text as string, args?.new_text as string, {
+          caseSensitive: args?.case_sensitive as boolean,
+          regex: args?.regex as boolean,
+          replaceAll: args?.replace_all as boolean ?? true,
+        });
+
+        let styled = 0;
+        if (count > 0) {
+          styled = doc.applyTextStyle(undefined, args?.new_text as string, {
+            styleId: args?.style_id as number | undefined,
+            ctrlSlot: args?.ctrl_slot as number | undefined,
+            caseSensitive: true,
+            replaceAll: args?.replace_all as boolean ?? true,
+            includeTables: args?.include_tables !== false,
+          });
+        }
+
+        return success({ message: `Replaced ${count} occurrence(s), styled ${styled} occurrence(s)`, count, styled });
       }
 
       case 'batch_replace': {
@@ -4315,6 +4408,12 @@ Call get_tool_guide with: template, table, image, search, read, create`
         return success({ styles: doc.getStyles() });
       }
 
+      case 'get_style_slots': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        return success({ style_slots: doc.getStyleSlots() });
+      }
+
       case 'get_char_shapes': {
         const doc = getDoc(args?.doc_id as string);
         if (!doc) return error('Document not found');
@@ -4340,6 +4439,36 @@ Call get_tool_guide with: template, table, image, search, read, create`
           return success({ message: 'Style applied' });
         }
         return error('Failed to apply style');
+      }
+
+      case 'apply_style_by_slot': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        if (doc.format === 'hwp') return error('HWP files are read-only');
+
+        if (doc.applyStyleBySlot(
+          args?.section_index as number,
+          args?.paragraph_index as number,
+          args?.ctrl_slot as number
+        )) {
+          return success({ message: 'Style slot applied' });
+        }
+        return error('Failed to apply style slot');
+      }
+
+      case 'apply_text_style': {
+        const doc = getDoc(args?.doc_id as string);
+        if (!doc) return error('Document not found');
+        if (doc.format === 'hwp') return error('HWP files are read-only');
+
+        const count = doc.applyTextStyle(args?.section_index as number | undefined, args?.search_text as string, {
+          styleId: args?.style_id as number | undefined,
+          ctrlSlot: args?.ctrl_slot as number | undefined,
+          caseSensitive: args?.case_sensitive as boolean,
+          replaceAll: args?.replace_all as boolean ?? true,
+          includeTables: args?.include_tables !== false,
+        });
+        return success({ message: `Styled ${count} occurrence(s)`, count });
       }
 
       // === Column Definition ===

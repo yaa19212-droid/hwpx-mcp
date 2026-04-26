@@ -451,13 +451,19 @@ export class HwpxParser {
       }
 
       const colorMatch = shapeContent.match(/textColor="([^"]*)"/);
-      if (colorMatch && colorMatch[1] !== '#000000') {
-        charShape.color = colorMatch[1];
+      if (colorMatch) {
+        charShape.textColor = colorMatch[1];
+        if (colorMatch[1] !== '#000000') {
+          charShape.color = colorMatch[1];
+        }
       }
 
       const bgColorMatch = shapeContent.match(/shadeColor="([^"]*)"/);
-      if (bgColorMatch && bgColorMatch[1] !== 'none') {
-        charShape.backgroundColor = bgColorMatch[1];
+      if (bgColorMatch) {
+        charShape.shadeColor = bgColorMatch[1];
+        if (bgColorMatch[1] !== 'none') {
+          charShape.backgroundColor = bgColorMatch[1];
+        }
       }
 
       const fontRefMatch = shapeContent.match(/<(?:hh:)?fontRef[^>]*/i);
@@ -1081,12 +1087,14 @@ export class HwpxParser {
   }
 
   private static parseStyleDefs(xml: string): void {
-    const styleRegex = /<hh:style\s+[^>]*id="(\d+)"[^>]*>([\s\S]*?)<\/hh:style>|<hh:style\s+[^>]*id="(\d+)"[^>]*\/>/gi;
+    const styleRegex = /<hh:style\b[^>]*(?:\/>|>[\s\S]*?<\/hh:style>)/gi;
     let match;
 
     while ((match = styleRegex.exec(xml)) !== null) {
-      const id = parseInt(match[1] || match[3]);
       const content = match[0];
+      const idMatch = content.match(/(?:^|\s)id="(\d+)"/);
+      if (!idMatch) continue;
+      const id = parseInt(idMatch[1], 10);
 
       const styleDef: import('./types').StyleDef = { id };
 
@@ -2188,6 +2196,7 @@ export class HwpxParser {
     // Get paragraph shape reference from the <hp:p> tag
     const paraShapeRefMatch = pTagAttrs.match(/paraPrIDRef="(\d+)"/);
     if (paraShapeRefMatch) {
+      paragraph.paraPrId = parseInt(paraShapeRefMatch[1]);
       const paraShape = this.styles.paraShapes.get(parseInt(paraShapeRefMatch[1]));
       if (paraShape) {
         paragraph.paraStyle = {
@@ -2206,6 +2215,11 @@ export class HwpxParser {
           paragraph.pageBreak = true;
         }
       }
+    }
+
+    const styleRefMatch = pTagAttrs.match(/styleIDRef="(\d+)"/);
+    if (styleRefMatch) {
+      paragraph.style = parseInt(styleRefMatch[1]);
     }
 
     const runRegex = /<hp:run[^>]*>([\s\S]*?)<\/hp:run>/g;
@@ -2256,6 +2270,7 @@ export class HwpxParser {
     
     let charStyle: TextRun['charStyle'] | undefined;
     const charShapeRefMatch = xml.match(/charPrIDRef="(\d+)"/);
+    const charPrIDRef = charShapeRefMatch ? parseInt(charShapeRefMatch[1]) : undefined;
     if (charShapeRefMatch) {
       const charShape = this.styles.charShapes.get(parseInt(charShapeRefMatch[1]));
       if (charShape) {
@@ -2409,8 +2424,12 @@ export class HwpxParser {
       return runs;
     }
 
+    for (const run of runs) {
+      if (charPrIDRef !== undefined) run.charPrIDRef = charPrIDRef;
+    }
+
     if (runs.length === 0) {
-      runs.push({ text: '', charStyle, hyperlink, field });
+      runs.push({ text: '', charPrIDRef, charStyle, hyperlink, field });
     }
 
     // Mark all runs in this block as having memo if applicable
