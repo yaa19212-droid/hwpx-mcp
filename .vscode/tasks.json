@@ -3,21 +3,22 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "compile",
-      "problemMatcher": "$esbuild",
+      "script": "build",
+      "path": "mcp-server",
+      "problemMatcher": "$tsc",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "label": "npm: compile"
+      "label": "npm: build - mcp-server"
     },
     {
       "type": "npm",
-      "script": "watch",
-      "problemMatcher": "$esbuild-watch",
-      "isBackground": true,
-      "group": "build",
-      "label": "npm: watch"
+      "script": "test",
+      "path": "mcp-server",
+      "problemMatcher": [],
+      "group": "test",
+      "label": "npm: test - mcp-server"
     }
   ]
 }

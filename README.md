@@ -1,11 +1,13 @@
-# HWPX MCP Server - Enhanced Edition
+# HWPX MCP Server
 
-[![GitHub](https://img.shields.io/badge/GitHub-Dayoooun%2Fhwp--extension-blue?logo=github)](https://github.com/Dayoooun/hwpx-mcp)
+[![GitHub](https://img.shields.io/badge/GitHub-Dayoooun%2Fhwpx--mcp-blue?logo=github)](https://github.com/Dayoooun/hwpx-mcp)
 [![Fork](https://img.shields.io/badge/Forked%20from-mjyoo2%2Fhwp--extension-gray?logo=github)](https://github.com/mjyoo2/hwp-extension)
 
 > 🚀 **Original 프로젝트를 Fork하여 안정성과 기능을 대폭 개선한 버전입니다.**
 
 AI 도구(Claude 등)와 연동하여 한글(HWPX) 문서를 자동으로 편집할 수 있는 MCP(Model Context Protocol) 서버입니다.
+
+> **Repository scope**: 이 레포는 이제 standalone MCP 서버를 주 산출물로 다룹니다. 기존 VS Code HWPX 커스텀 에디터 확장은 별도 프로젝트로 분리되는 대상으로 정리되었으며, 관련 분리 내역은 [`docs/vscode-extension-split.md`](docs/vscode-extension-split.md)에 기록되어 있습니다.
 
 ---
 
@@ -161,7 +163,7 @@ claude mcp add hwpx-mcp node /path/to/hwpx-mcp/mcp-server/dist/index.js
 
 #### 🆚 VS Code (MCP 확장 사용 시)
 
-**설정 파일:** `.vscode/mcp.json` (프로젝트 폴더 내)
+**설정 파일:** `.vscode/mcp.json` (MCP 클라이언트 설정 파일)
 
 ```json
 {
@@ -498,7 +500,7 @@ await mcp.replace_text_in_cell({
 - 📦 **Preservation**: 원본 charPr/spacing 스타일 완전 보존
 
 ### v0.1.0 (Original)
-- 최초 릴리스 (mjyoo2/hwp-extension)
+- 최초 릴리스 (mjyoo2/hwp-extension 기반)
 
 ---
 

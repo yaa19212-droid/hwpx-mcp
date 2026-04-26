@@ -2,7 +2,7 @@
   "mcpServers": {
     "hwpx-mcp": {
       "command": "node",
-      "args": ["D:/hwp-extension/mcp-server/dist/index.js"]
+      "args": ["${workspaceFolder}/mcp-server/dist/index.js"]
     }
   }
 }
