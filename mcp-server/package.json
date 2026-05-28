@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "MCP Server for HWPX document manipulation",
   "main": "dist/index.js",
+  "license": "MIT",
   "bin": {
     "hwpx-mcp-server": "./dist/index.js"
   },

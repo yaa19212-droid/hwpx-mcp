@@ -1,9 +1,9 @@
 # HWPX MCP Server
 
-[![GitHub](https://img.shields.io/badge/GitHub-Dayoooun%2Fhwpx--mcp-blue?logo=github)](https://github.com/Dayoooun/hwpx-mcp)
+[![GitHub](https://img.shields.io/badge/GitHub-yaa19212--droid%2Fhwpx--mcp-blue?logo=github)](https://github.com/yaa19212-droid/hwpx-mcp)
 [![Fork](https://img.shields.io/badge/Forked%20from-mjyoo2%2Fhwp--extension-gray?logo=github)](https://github.com/mjyoo2/hwp-extension)
 
-> 🚀 **Original 프로젝트를 Fork하여 안정성과 기능을 대폭 개선한 버전입니다.**
+> 🚀 **Dayoooun/hwpx-mcp 기반 개인 포크로, MCP 서버 안정성·문서 편집 안전장치·에이전트 사용성을 개선한 버전입니다.**
 
 AI 도구(Claude 등)와 연동하여 한글(HWPX) 문서를 자동으로 편집할 수 있는 MCP(Model Context Protocol) 서버입니다.
 
@@ -72,7 +72,7 @@ AI 도구(Claude 등)와 연동하여 한글(HWPX) 문서를 자동으로 편집
 ### 1. MCP 서버 설치
 
 ```bash
-git clone https://github.com/Dayoooun/hwpx-mcp.git
+git clone https://github.com/yaa19212-droid/hwpx-mcp.git
 cd hwpx-mcp/mcp-server
 npm install
 npm run build
@@ -511,13 +511,15 @@ await mcp.replace_text_in_cell({
 ## 🙏 Credits
 
 - Original Project: [mjyoo2/hwp-extension](https://github.com/mjyoo2/hwp-extension)
-- Enhanced by: [Dayoooun](https://github.com/Dayoooun)
+- Upstream fork: [Dayoooun/hwpx-mcp](https://github.com/Dayoooun/hwpx-mcp)
+- Enhanced in this fork by: [yaa19212-droid](https://github.com/yaa19212-droid)
 
 ---
 
 ## 📄 License
 
-MIT
+MIT. This fork preserves the original MIT license notice and adds a copyright
+notice for modifications in this fork.
 
 ---
 
@@ -533,4 +535,4 @@ MIT
 
 ## 🤝 Contributing
 
-버그 리포트 및 기능 요청: [GitHub Issues](https://github.com/Dayoooun/hwpx-mcp/issues)
+버그 리포트 및 기능 요청: [GitHub Issues](https://github.com/yaa19212-droid/hwpx-mcp/issues)
