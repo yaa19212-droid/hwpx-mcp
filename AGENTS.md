@@ -1,18 +1,34 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
+# Fork Development Notes
 
-These instructions are for AI assistants working in this project.
+This fork is centered on the standalone HWPX MCP server under `mcp-server/`.
 
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
+## Working Style
 
-Use `@/openspec/AGENTS.md` to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
+- No external spec/proposal CLI is required for this fork's normal development
+  workflow.
+- For small bug fixes, keep changes focused and update tests when practical.
+- For risky HWPX/HWPML changes, write or update a short Markdown note under
+  `docs/bug-notes/` or `docs/design-notes/` before or alongside the code change.
+- Prefer preserving original HWPML XML structure and styles over regenerating
+  broad document sections.
+- Treat table, nested-table, image, save/load, and XML mutation paths carefully;
+  these areas should have focused verification.
 
-Keep this managed block so 'openspec update' can refresh the instructions.
+## Project Shape
 
-<!-- OPENSPEC:END -->
+- `mcp-server/src/index.ts` defines MCP tools and request handling.
+- `mcp-server/src/HwpxDocument.ts` owns document mutation, save behavior, XML
+  persistence, and undo/redo state.
+- `mcp-server/src/HwpxParser.ts` parses HWPX ZIP/XML content into in-memory
+  structures.
+- `docs/development-workflow.md` describes this fork's lightweight development
+  workflow.
+
+## Commands
+
+```bash
+cd mcp-server
+npm install
+npm run build
+npm test
+```

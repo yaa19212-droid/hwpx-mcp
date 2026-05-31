@@ -13,6 +13,9 @@ node_modules/
 reference/
 samples/
 
+# Local archived planning artifacts from the upstream spec workflow
+openspec/
+
 # MCP server build
 mcp-server/dist/
 mcp-server/node_modules/
